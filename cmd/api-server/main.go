@@ -1,7 +1,27 @@
 package main
 
-import "fmt"
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/tsongpon/athena/internal/handler"
+	"github.com/tsongpon/athena/internal/repository"
+	"github.com/tsongpon/athena/internal/service"
+)
 
 func main() {
-	fmt.Println("Hello world")
+	bookmarkRepo := repository.NewBookmarkInMemRepository()
+	bookmarkService := service.NewBookmarkService(bookmarkRepo)
+	httpHandler := handler.NewHTTPHandler(bookmarkService)
+
+	e := echo.New()
+
+	// Middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+
+	// Routes
+	e.GET("/ping", httpHandler.Ping)
+
+	// Start server
+	e.Logger.Fatal(e.Start(":1323"))
 }
