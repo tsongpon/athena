@@ -13,7 +13,6 @@ func TestBookmarkInMemRepository_CreateBookmark(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
 	bookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Example",
@@ -26,8 +25,9 @@ func TestBookmarkInMemRepository_CreateBookmark(t *testing.T) {
 		return
 	}
 
-	if result.ID != bookmark.ID {
-		t.Errorf("CreateBookmark() result ID = %v, want %v", result.ID, bookmark.ID)
+	// ID should be auto-generated
+	if result.ID == "" {
+		t.Error("CreateBookmark() result ID should not be empty")
 	}
 	if result.UserID != bookmark.UserID {
 		t.Errorf("CreateBookmark() result UserID = %v, want %v", result.UserID, bookmark.UserID)
@@ -45,28 +45,27 @@ func TestBookmarkInMemRepository_GetBookmark(t *testing.T) {
 
 	// Create a test bookmark
 	bookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Example",
 		CreatedAt: time.Now(),
 	}
 
-	_, err := repo.CreateBookmark(bookmark)
+	created, err := repo.CreateBookmark(bookmark)
 	if err != nil {
 		t.Fatalf("Failed to create bookmark: %v", err)
 	}
 
-	// Test getting the bookmark
-	result, err := repo.GetBookmark("1")
+	// Test getting the bookmark using the auto-generated ID
+	result, err := repo.GetBookmark(created.ID)
 	if err != nil {
 		t.Errorf("GetBookmark() unexpected error = %v", err)
 		return
 	}
 
 	// Verify the result
-	if result.ID != bookmark.ID {
-		t.Errorf("GetBookmark() result ID = %v, want %v", result.ID, bookmark.ID)
+	if result.ID != created.ID {
+		t.Errorf("GetBookmark() result ID = %v, want %v", result.ID, created.ID)
 	}
 	if result.UserID != bookmark.UserID {
 		t.Errorf("GetBookmark() result UserID = %v, want %v", result.UserID, bookmark.UserID)
@@ -77,8 +76,8 @@ func TestBookmarkInMemRepository_GetBookmark(t *testing.T) {
 	if result.Title != bookmark.Title {
 		t.Errorf("GetBookmark() result Title = %v, want %v", result.Title, bookmark.Title)
 	}
-	if !result.CreatedAt.Equal(bookmark.CreatedAt) {
-		t.Errorf("GetBookmark() result CreatedAt = %v, want %v", result.CreatedAt, bookmark.CreatedAt)
+	if !result.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("GetBookmark() result CreatedAt = %v, want %v", result.CreatedAt, created.CreatedAt)
 	}
 }
 
@@ -103,21 +102,20 @@ func TestBookmarkInMemRepository_GetBookmark_AfterUpdate(t *testing.T) {
 
 	// Create initial bookmark
 	originalBookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Original Title",
 		CreatedAt: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	_, err := repo.CreateBookmark(originalBookmark)
+	created, err := repo.CreateBookmark(originalBookmark)
 	if err != nil {
 		t.Fatalf("Failed to create bookmark: %v", err)
 	}
 
 	// Update the bookmark
 	updatedBookmark := model.Bookmark{
-		ID:     "1",
+		ID:     created.ID,
 		UserID: "user1",
 		URL:    "https://updated.com",
 		Title:  "Updated Title",
@@ -129,7 +127,7 @@ func TestBookmarkInMemRepository_GetBookmark_AfterUpdate(t *testing.T) {
 	}
 
 	// Get the bookmark and verify it returns the updated version
-	result, err := repo.GetBookmark("1")
+	result, err := repo.GetBookmark(created.ID)
 	if err != nil {
 		t.Errorf("GetBookmark() after update unexpected error = %v", err)
 		return
@@ -142,8 +140,8 @@ func TestBookmarkInMemRepository_GetBookmark_AfterUpdate(t *testing.T) {
 		t.Errorf("GetBookmark() after update result Title = %v, want %v", result.Title, updatedBookmark.Title)
 	}
 	// CreatedAt should still be the original value
-	if !result.CreatedAt.Equal(originalBookmark.CreatedAt) {
-		t.Errorf("GetBookmark() after update CreatedAt = %v, want %v", result.CreatedAt, originalBookmark.CreatedAt)
+	if !result.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("GetBookmark() after update CreatedAt = %v, want %v", result.CreatedAt, created.CreatedAt)
 	}
 }
 
@@ -152,38 +150,37 @@ func TestBookmarkInMemRepository_GetBookmark_AfterDelete(t *testing.T) {
 
 	// Create a bookmark
 	bookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Example",
 		CreatedAt: time.Now(),
 	}
 
-	_, err := repo.CreateBookmark(bookmark)
+	created, err := repo.CreateBookmark(bookmark)
 	if err != nil {
 		t.Fatalf("Failed to create bookmark: %v", err)
 	}
 
 	// Verify bookmark exists
-	_, err = repo.GetBookmark("1")
+	_, err = repo.GetBookmark(created.ID)
 	if err != nil {
 		t.Fatalf("GetBookmark() before delete failed: %v", err)
 	}
 
 	// Delete the bookmark
-	err = repo.DeleteBookmark("1")
+	err = repo.DeleteBookmark(created.ID)
 	if err != nil {
 		t.Fatalf("Failed to delete bookmark: %v", err)
 	}
 
 	// Try to get the deleted bookmark
-	_, err = repo.GetBookmark("1")
+	_, err = repo.GetBookmark(created.ID)
 	if err == nil {
 		t.Error("GetBookmark() after delete should return error")
 		return
 	}
 
-	expectedError := "bookmark with ID 1 not found"
+	expectedError := fmt.Sprintf("bookmark with ID %s not found", created.ID)
 	if err.Error() != expectedError {
 		t.Errorf("GetBookmark() after delete error = %v, want %v", err.Error(), expectedError)
 	}
@@ -196,14 +193,13 @@ func TestBookmarkInMemRepository_GetBookmark_ConcurrentAccess(t *testing.T) {
 
 	// Create a bookmark
 	bookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Example",
 		CreatedAt: time.Now(),
 	}
 
-	_, err := repo.CreateBookmark(bookmark)
+	created, err := repo.CreateBookmark(bookmark)
 	if err != nil {
 		t.Fatalf("Failed to create bookmark: %v", err)
 	}
@@ -214,13 +210,13 @@ func TestBookmarkInMemRepository_GetBookmark_ConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				result, err := repo.GetBookmark("1")
+				result, err := repo.GetBookmark(created.ID)
 				if err != nil {
 					t.Errorf("Concurrent GetBookmark() error: %v", err)
 					return
 				}
-				if result.ID != bookmark.ID {
-					t.Errorf("Concurrent GetBookmark() result ID = %v, want %v", result.ID, bookmark.ID)
+				if result.ID != created.ID {
+					t.Errorf("Concurrent GetBookmark() result ID = %v, want %v", result.ID, created.ID)
 				}
 			}
 		}()
@@ -231,68 +227,55 @@ func TestBookmarkInMemRepository_GetBookmark_ConcurrentAccess(t *testing.T) {
 func TestBookmarkInMemRepository_GetBookmark_WithEmptyID(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
-	// Create a bookmark with empty ID
-	bookmark := model.Bookmark{
-		ID:        "",
-		UserID:    "user1",
-		URL:       "https://example.com",
-		Title:     "Example",
-		CreatedAt: time.Now(),
-	}
-
-	_, err := repo.CreateBookmark(bookmark)
-	if err != nil {
-		t.Fatalf("Failed to create bookmark with empty ID: %v", err)
-	}
-
-	// Test getting bookmark with empty ID
-	result, err := repo.GetBookmark("")
-	if err != nil {
-		t.Errorf("GetBookmark() with empty ID unexpected error = %v", err)
+	// Test getting bookmark with empty ID (should fail since IDs are auto-generated)
+	_, err := repo.GetBookmark("")
+	if err == nil {
+		t.Error("GetBookmark() with empty ID should return error")
 		return
 	}
 
-	if result.ID != "" {
-		t.Errorf("GetBookmark() with empty ID result ID = %v, want empty string", result.ID)
-	}
-	if result.UserID != bookmark.UserID {
-		t.Errorf("GetBookmark() with empty ID result UserID = %v, want %v", result.UserID, bookmark.UserID)
+	expectedError := "bookmark with ID  not found"
+	if err.Error() != expectedError {
+		t.Errorf("GetBookmark() error = %v, want %v", err.Error(), expectedError)
 	}
 }
 
-func TestBookmarkInMemRepository_CreateBookmark_DuplicateID(t *testing.T) {
+// TestBookmarkInMemRepository_CreateBookmark_MultipleBookmarks tests creating multiple bookmarks
+// Since IDs are auto-generated, duplicate IDs are not possible
+func TestBookmarkInMemRepository_CreateBookmark_MultipleBookmarks(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
 	bookmark1 := model.Bookmark{
-		ID:     "1",
 		UserID: "user1",
 		URL:    "https://example1.com",
 		Title:  "Example 1",
 	}
 
 	bookmark2 := model.Bookmark{
-		ID:     "1",
 		UserID: "user2",
 		URL:    "https://example2.com",
 		Title:  "Example 2",
 	}
 
 	// Create first bookmark
-	_, err := repo.CreateBookmark(bookmark1)
+	created1, err := repo.CreateBookmark(bookmark1)
 	if err != nil {
 		t.Fatalf("First CreateBookmark() failed: %v", err)
 	}
 
-	// Try to create second bookmark with same ID
-	_, err = repo.CreateBookmark(bookmark2)
-	if err == nil {
-		t.Error("CreateBookmark() with duplicate ID should return error")
-		return
+	// Create second bookmark
+	created2, err := repo.CreateBookmark(bookmark2)
+	if err != nil {
+		t.Fatalf("Second CreateBookmark() failed: %v", err)
 	}
 
-	expectedError := "bookmark with ID 1 already exists"
-	if err.Error() != expectedError {
-		t.Errorf("CreateBookmark() error = %v, want %v", err.Error(), expectedError)
+	// IDs should be different (auto-generated)
+	if created1.ID == created2.ID {
+		t.Error("CreateBookmark() should generate unique IDs for different bookmarks")
+	}
+
+	if created1.ID == "" || created2.ID == "" {
+		t.Error("CreateBookmark() should generate non-empty IDs")
 	}
 }
 
@@ -302,21 +285,18 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 	// Create test bookmarks
 	bookmarks := []model.Bookmark{
 		{
-			ID:        "1",
 			UserID:    "user1",
 			URL:       "https://example1.com",
 			Title:     "Example 1",
 			CreatedAt: time.Now(),
 		},
 		{
-			ID:        "2",
 			UserID:    "user1",
 			URL:       "https://example2.com",
 			Title:     "Example 2",
 			CreatedAt: time.Now(),
 		},
 		{
-			ID:        "3",
 			UserID:    "user2",
 			URL:       "https://example3.com",
 			Title:     "Example 3",
@@ -345,16 +325,10 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 	}
 
 	// Check if both user1 bookmarks are present
-	foundIDs := make(map[string]bool)
 	for _, bookmark := range result {
 		if bookmark.UserID != "user1" {
 			t.Errorf("ListBookmarks() bookmark %s has wrong UserID = %v, want user1", bookmark.ID, bookmark.UserID)
 		}
-		foundIDs[bookmark.ID] = true
-	}
-
-	if !foundIDs["1"] || !foundIDs["2"] {
-		t.Error("ListBookmarks() missing expected bookmarks")
 	}
 
 	// Test listing bookmarks for user2
@@ -369,8 +343,8 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 		return
 	}
 
-	if result[0].ID != "3" {
-		t.Errorf("ListBookmarks() bookmark ID = %v, want 3", result[0].ID)
+	if result[0].UserID != "user2" {
+		t.Errorf("ListBookmarks() bookmark UserID = %v, want user2", result[0].UserID)
 	}
 
 	// Test listing bookmarks for non-existent user
@@ -390,21 +364,20 @@ func TestBookmarkInMemRepository_UpdateBookmark(t *testing.T) {
 
 	// Create initial bookmark
 	originalBookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Original Title",
 		CreatedAt: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	_, err := repo.CreateBookmark(originalBookmark)
+	created, err := repo.CreateBookmark(originalBookmark)
 	if err != nil {
 		t.Fatalf("Failed to create initial bookmark: %v", err)
 	}
 
 	// Update the bookmark
 	updatedBookmark := model.Bookmark{
-		ID:     "1",
+		ID:     created.ID,
 		UserID: "user1",
 		URL:    "https://updated.com",
 		Title:  "Updated Title",
@@ -431,8 +404,8 @@ func TestBookmarkInMemRepository_UpdateBookmark(t *testing.T) {
 	}
 
 	// Verify CreatedAt is preserved from original
-	if !result.CreatedAt.Equal(originalBookmark.CreatedAt) {
-		t.Errorf("UpdateBookmark() should preserve CreatedAt = %v, got %v", originalBookmark.CreatedAt, result.CreatedAt)
+	if !result.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("UpdateBookmark() should preserve CreatedAt = %v, got %v", created.CreatedAt, result.CreatedAt)
 	}
 
 	// Test updating non-existent bookmark
@@ -460,20 +433,19 @@ func TestBookmarkInMemRepository_DeleteBookmark(t *testing.T) {
 
 	// Create test bookmark
 	bookmark := model.Bookmark{
-		ID:        "1",
 		UserID:    "user1",
 		URL:       "https://example.com",
 		Title:     "Example",
 		CreatedAt: time.Now(),
 	}
 
-	_, err := repo.CreateBookmark(bookmark)
+	created, err := repo.CreateBookmark(bookmark)
 	if err != nil {
 		t.Fatalf("Failed to create bookmark: %v", err)
 	}
 
 	// Delete the bookmark
-	err = repo.DeleteBookmark("1")
+	err = repo.DeleteBookmark(created.ID)
 	if err != nil {
 		t.Errorf("DeleteBookmark() unexpected error = %v", err)
 		return
@@ -503,13 +475,13 @@ func TestBookmarkInMemRepository_DeleteBookmark(t *testing.T) {
 	}
 
 	// Test deleting already deleted bookmark
-	err = repo.DeleteBookmark("1")
+	err = repo.DeleteBookmark(created.ID)
 	if err == nil {
 		t.Error("DeleteBookmark() on already deleted bookmark should return error")
 		return
 	}
 
-	expectedError = "bookmark with ID 1 not found"
+	expectedError = fmt.Sprintf("bookmark with ID %s not found", created.ID)
 	if err.Error() != expectedError {
 		t.Errorf("DeleteBookmark() error = %v, want %v", err.Error(), expectedError)
 	}
@@ -603,6 +575,16 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 	numGoroutines := 10
 	bookmarksPerGoroutine := 10
 
+	// Store created bookmark IDs for each user
+	type userBookmarks struct {
+		sync.Mutex
+		ids []string
+	}
+	bookmarkIDsPerUser := make(map[int]*userBookmarks)
+	for i := 0; i < numGoroutines; i++ {
+		bookmarkIDsPerUser[i] = &userBookmarks{ids: make([]string, 0, bookmarksPerGoroutine)}
+	}
+
 	// Test concurrent creates
 	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
@@ -610,14 +592,18 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < bookmarksPerGoroutine; j++ {
 				bookmark := model.Bookmark{
-					ID:     fmt.Sprintf("bookmark_%d_%d", goroutineID, j),
 					UserID: fmt.Sprintf("user_%d", goroutineID),
 					URL:    fmt.Sprintf("https://example%d-%d.com", goroutineID, j),
 					Title:  fmt.Sprintf("Title %d-%d", goroutineID, j),
 				}
-				_, err := repo.CreateBookmark(bookmark)
+				created, err := repo.CreateBookmark(bookmark)
 				if err != nil {
 					t.Errorf("Concurrent CreateBookmark() error: %v", err)
+				} else {
+					// Store the auto-generated ID
+					bookmarkIDsPerUser[goroutineID].Lock()
+					bookmarkIDsPerUser[goroutineID].ids = append(bookmarkIDsPerUser[goroutineID].ids, created.ID)
+					bookmarkIDsPerUser[goroutineID].Unlock()
 				}
 			}
 		}(i)
@@ -643,7 +629,7 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 		t.Errorf("Expected total %d bookmarks, got %d", expectedTotal, totalBookmarks)
 	}
 
-	// Test concurrent reads and writes
+	// Test concurrent reads and writes using actual bookmark IDs
 	wg.Add(numGoroutines * 2)
 	for i := 0; i < numGoroutines; i++ {
 		// Reader goroutine
@@ -658,13 +644,16 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 			}
 		}(i)
 
-		// Writer goroutine (update)
+		// Writer goroutine (update) - use actual bookmark IDs
 		go func(goroutineID int) {
 			defer wg.Done()
-			for j := 0; j < 5; j++ {
-				bookmarkID := fmt.Sprintf("bookmark_%d_%d", goroutineID, j)
+			bookmarkIDsPerUser[goroutineID].Lock()
+			ids := bookmarkIDsPerUser[goroutineID].ids
+			bookmarkIDsPerUser[goroutineID].Unlock()
+
+			for j := 0; j < 5 && j < len(ids); j++ {
 				updatedBookmark := model.Bookmark{
-					ID:     bookmarkID,
+					ID:     ids[j],
 					UserID: fmt.Sprintf("user_%d", goroutineID),
 					URL:    fmt.Sprintf("https://updated%d-%d.com", goroutineID, j),
 					Title:  fmt.Sprintf("Updated Title %d-%d", goroutineID, j),
@@ -682,9 +671,8 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
-	// Test with empty string values
+	// Test with empty string values (ID will be auto-generated)
 	emptyBookmark := model.Bookmark{
-		ID:     "",
 		UserID: "",
 		URL:    "",
 		Title:  "",
@@ -694,8 +682,12 @@ func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 	if err != nil {
 		t.Errorf("CreateBookmark() with empty values failed: %v", err)
 	}
-	if result.ID != "" || result.UserID != "" || result.URL != "" || result.Title != "" {
-		t.Error("CreateBookmark() should preserve empty string values")
+	// ID should be auto-generated even if other fields are empty
+	if result.ID == "" {
+		t.Error("CreateBookmark() should auto-generate ID even with empty other fields")
+	}
+	if result.UserID != "" || result.URL != "" || result.Title != "" {
+		t.Error("CreateBookmark() should preserve empty string values for non-ID fields")
 	}
 
 	// Test listing bookmarks for empty userID
@@ -707,9 +699,8 @@ func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 		t.Errorf("ListBookmarks() with empty userID should return 1 bookmark, got %d", len(bookmarks))
 	}
 
-	// Test with special characters in ID and UserID
+	// Test with special characters in UserID
 	specialBookmark := model.Bookmark{
-		ID:     "bookmark@#$%^&*()",
 		UserID: "user@#$%^&*()",
 		URL:    "https://example.com",
 		Title:  "Special Characters",

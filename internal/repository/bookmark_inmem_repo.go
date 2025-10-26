@@ -2,35 +2,34 @@ package repository
 
 import (
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/tsongpon/athena/internal/model"
 )
 
 // BookmarkInMemRepository implements BookmarkRepository interface using an in-memory map
 type BookmarkInMemRepository struct {
 	bookmarks map[string]model.Bookmark
-	// mutex     sync.RWMutex
+	mutex     sync.RWMutex
 }
 
 // NewBookmarkInMemRepository creates a new instance of BookmarkInMemRepository
 func NewBookmarkInMemRepository() BookmarkInMemRepository {
 	return BookmarkInMemRepository{
 		bookmarks: make(map[string]model.Bookmark),
-		// mutex:     sync.RWMutex{},
+		mutex:     sync.RWMutex{},
 	}
 }
 
 // CreateBookmark creates a new bookmark in the repository
-func (r BookmarkInMemRepository) CreateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
-	// r.mutex.Lock()
-	// defer r.mutex.Unlock()
+func (r *BookmarkInMemRepository) CreateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
-	// Check if bookmark with this ID already exists
-	if _, exists := r.bookmarks[bookmark.ID]; exists {
-		return model.Bookmark{}, fmt.Errorf("bookmark with ID %s already exists", bookmark.ID)
-	}
-
+	bookmark.ID = uuid.New().String()
 	// Set creation time if not provided
 	if bookmark.CreatedAt.IsZero() {
 		bookmark.CreatedAt = time.Now()
@@ -43,11 +42,12 @@ func (r BookmarkInMemRepository) CreateBookmark(bookmark model.Bookmark) (model.
 }
 
 // GetBookmark retrieves a bookmark by its ID
-func (r BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error) {
-	// r.mutex.RLock()
-	// defer r.mutex.RUnlock()
+func (r *BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 
 	// Check if bookmark exists
+	log.Printf("Getting bookmark with ID %s", id)
 	bookmark, exists := r.bookmarks[id]
 	if !exists {
 		return model.Bookmark{}, fmt.Errorf("bookmark with ID %s not found", id)
@@ -57,9 +57,9 @@ func (r BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error) 
 }
 
 // ListBookmarks retrieves all bookmarks for a specific user
-func (r BookmarkInMemRepository) ListBookmarks(userID string) ([]model.Bookmark, error) {
-	// r.mutex.RLock()
-	// defer r.mutex.RUnlock()
+func (r *BookmarkInMemRepository) ListBookmarks(userID string) ([]model.Bookmark, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 
 	var userBookmarks []model.Bookmark
 
@@ -73,9 +73,9 @@ func (r BookmarkInMemRepository) ListBookmarks(userID string) ([]model.Bookmark,
 }
 
 // UpdateBookmark updates an existing bookmark in the repository
-func (r BookmarkInMemRepository) UpdateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
-	// r.mutex.Lock()
-	// defer r.mutex.Unlock()
+func (r *BookmarkInMemRepository) UpdateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	// Check if bookmark exists
 	existing, exists := r.bookmarks[bookmark.ID]
@@ -93,9 +93,9 @@ func (r BookmarkInMemRepository) UpdateBookmark(bookmark model.Bookmark) (model.
 }
 
 // DeleteBookmark removes a bookmark from the repository
-func (r BookmarkInMemRepository) DeleteBookmark(id string) error {
-	// r.mutex.Lock()
-	// defer r.mutex.Unlock()
+func (r *BookmarkInMemRepository) DeleteBookmark(id string) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	// Check if bookmark exists
 	if _, exists := r.bookmarks[id]; !exists {

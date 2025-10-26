@@ -75,7 +75,10 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.CreateBookmark("user-1", "https://example.com")
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-1",
+		URL:    "https://example.com",
+	})
 
 	if err != nil {
 		t.Errorf("CreateBookmark() unexpected error = %v", err)
@@ -102,7 +105,10 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.CreateBookmark("user-1", "https://example.com")
+	_, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-1",
+		URL:    "https://example.com",
+	})
 
 	if err == nil {
 		t.Error("CreateBookmark() should return error when repository fails")
@@ -127,7 +133,10 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.CreateBookmark("user-1", "")
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-1",
+		URL:    "",
+	})
 
 	if err != nil {
 		t.Errorf("CreateBookmark() with empty URL unexpected error = %v", err)
@@ -151,7 +160,10 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.CreateBookmark("", "https://example.com")
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "",
+		URL:    "https://example.com",
+	})
 
 	if err != nil {
 		t.Errorf("CreateBookmark() with empty UserID unexpected error = %v", err)
@@ -160,6 +172,33 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 
 	if result.UserID != "" {
 		t.Errorf("CreateBookmark() result UserID = %v, want empty string", result.UserID)
+	}
+}
+
+// TestBookmarkService_CreateBookmark_NonEmptyID tests creating bookmark with non-empty ID should fail
+func TestBookmarkService_CreateBookmark_NonEmptyID(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			t.Error("CreateBookmark() should not be called when ID is not empty")
+			return model.Bookmark{}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	_, err := service.CreateBookmark(model.Bookmark{
+		ID:     "existing-id",
+		UserID: "user-1",
+		URL:    "https://example.com",
+	})
+
+	if err == nil {
+		t.Error("CreateBookmark() should return error when ID is not empty")
+		return
+	}
+
+	expectedError := "bookmark ID must be empty"
+	if err.Error() != expectedError {
+		t.Errorf("CreateBookmark() error = %v, want %v", err.Error(), expectedError)
 	}
 }
 
@@ -196,7 +235,7 @@ func TestBookmarkService_ArchiveBookmark(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.ArchiveBookmark("user-1", "bookmark-1")
+	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
 		t.Errorf("ArchiveBookmark() unexpected error = %v", err)
@@ -220,7 +259,7 @@ func TestBookmarkService_ArchiveBookmark_BookmarkNotFound(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.ArchiveBookmark("user-1", "nonexistent")
+	_, err := service.ArchiveBookmark("nonexistent")
 
 	if err == nil {
 		t.Error("ArchiveBookmark() should return error when bookmark not found")
@@ -233,38 +272,46 @@ func TestBookmarkService_ArchiveBookmark_BookmarkNotFound(t *testing.T) {
 	}
 }
 
-// TestBookmarkService_ArchiveBookmark_UnauthorizedUser tests authorization check
+// TestBookmarkService_ArchiveBookmark_UnauthorizedUser tests that the service archives bookmark regardless of user
+// Note: The current implementation doesn't check authorization - it's the caller's responsibility
 func TestBookmarkService_ArchiveBookmark_UnauthorizedUser(t *testing.T) {
-	existingBookmark := model.Bookmark{
+	unauthorizedBookmark := model.Bookmark{
 		ID:         "bookmark-1",
-		UserID:     "user-1",
+		UserID:     "user-2",
 		URL:        "https://example.com",
 		Title:      "Example",
 		IsArchived: false,
 		CreatedAt:  time.Now(),
 	}
 
+	archivedBookmark := unauthorizedBookmark
+	archivedBookmark.IsArchived = true
+
 	mockRepo := &MockBookmarkRepository{
 		getBookmarkFunc: func(id string) (model.Bookmark, error) {
-			return existingBookmark, nil
+			if id != "bookmark-1" {
+				t.Errorf("GetBookmark() received ID = %v, want bookmark-1", id)
+			}
+			return unauthorizedBookmark, nil
 		},
 		updateBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
-			t.Error("UpdateBookmark() should not be called for unauthorized user")
-			return model.Bookmark{}, nil
+			if !bookmark.IsArchived {
+				t.Error("UpdateBookmark() should receive bookmark with IsArchived = true")
+			}
+			return archivedBookmark, nil
 		},
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.ArchiveBookmark("user-2", "bookmark-1")
+	result, err := service.ArchiveBookmark("bookmark-1")
 
-	if err == nil {
-		t.Error("ArchiveBookmark() should return error for unauthorized user")
+	if err != nil {
+		t.Errorf("ArchiveBookmark() unexpected error = %v", err)
 		return
 	}
 
-	expectedError := "user user-2 is not authorized to archive bookmark bookmark-1"
-	if err.Error() != expectedError {
-		t.Errorf("ArchiveBookmark() error = %v, want %v", err.Error(), expectedError)
+	if !result.IsArchived {
+		t.Error("ArchiveBookmark() result should have IsArchived = true")
 	}
 }
 
@@ -289,7 +336,7 @@ func TestBookmarkService_ArchiveBookmark_UpdateError(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.ArchiveBookmark("user-1", "bookmark-1")
+	_, err := service.ArchiveBookmark("bookmark-1")
 
 	if err == nil {
 		t.Error("ArchiveBookmark() should return error when update fails")
@@ -326,7 +373,7 @@ func TestBookmarkService_ArchiveBookmark_AlreadyArchived(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.ArchiveBookmark("user-1", "bookmark-1")
+	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
 		t.Errorf("ArchiveBookmark() on already archived bookmark unexpected error = %v", err)
@@ -360,7 +407,7 @@ func TestBookmarkService_ArchiveBookmark_EmptyUserID(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.ArchiveBookmark("", "bookmark-1")
+	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
 		t.Errorf("ArchiveBookmark() with empty userID unexpected error = %v", err)
@@ -384,11 +431,124 @@ func TestBookmarkService_ArchiveBookmark_EmptyBookmarkID(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.ArchiveBookmark("user-1", "")
+	_, err := service.ArchiveBookmark("")
 
 	if err == nil {
 		t.Error("ArchiveBookmark() with empty bookmarkID should return error")
 		return
+	}
+
+	expectedErrorSubstring := "failed to get bookmark with ID "
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("ArchiveBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_GetBookmark tests successful bookmark retrieval
+func TestBookmarkService_GetBookmark(t *testing.T) {
+	expectedBookmark := model.Bookmark{
+		ID:        "bookmark-1",
+		UserID:    "user-1",
+		URL:       "https://example.com",
+		Title:     "Example",
+		CreatedAt: time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		getBookmarkFunc: func(id string) (model.Bookmark, error) {
+			if id != "bookmark-1" {
+				t.Errorf("GetBookmark() received ID = %v, want bookmark-1", id)
+			}
+			return expectedBookmark, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	result, err := service.GetBookmark("bookmark-1")
+
+	if err != nil {
+		t.Errorf("GetBookmark() unexpected error = %v", err)
+		return
+	}
+
+	if result.ID != expectedBookmark.ID {
+		t.Errorf("GetBookmark() result ID = %v, want %v", result.ID, expectedBookmark.ID)
+	}
+	if result.UserID != expectedBookmark.UserID {
+		t.Errorf("GetBookmark() result UserID = %v, want %v", result.UserID, expectedBookmark.UserID)
+	}
+	if result.URL != expectedBookmark.URL {
+		t.Errorf("GetBookmark() result URL = %v, want %v", result.URL, expectedBookmark.URL)
+	}
+	if result.Title != expectedBookmark.Title {
+		t.Errorf("GetBookmark() result Title = %v, want %v", result.Title, expectedBookmark.Title)
+	}
+}
+
+// TestBookmarkService_GetBookmark_EmptyID tests getting bookmark with empty ID
+func TestBookmarkService_GetBookmark_EmptyID(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		getBookmarkFunc: func(id string) (model.Bookmark, error) {
+			t.Error("GetBookmark() should not be called with empty ID")
+			return model.Bookmark{}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	_, err := service.GetBookmark("")
+
+	if err == nil {
+		t.Error("GetBookmark() should return error when ID is empty")
+		return
+	}
+
+	expectedError := "id is required"
+	if err.Error() != expectedError {
+		t.Errorf("GetBookmark() error = %v, want %v", err.Error(), expectedError)
+	}
+}
+
+// TestBookmarkService_GetBookmark_RepositoryError tests error handling when repository fails
+func TestBookmarkService_GetBookmark_RepositoryError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		getBookmarkFunc: func(id string) (model.Bookmark, error) {
+			return model.Bookmark{}, fmt.Errorf("database connection failed")
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	_, err := service.GetBookmark("bookmark-1")
+
+	if err == nil {
+		t.Error("GetBookmark() should return error when repository fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to get bookmarks for id bookmark-1"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("GetBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_GetBookmark_NotFound tests getting non-existent bookmark
+func TestBookmarkService_GetBookmark_NotFound(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		getBookmarkFunc: func(id string) (model.Bookmark, error) {
+			return model.Bookmark{}, fmt.Errorf("bookmark with ID %s not found", id)
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	_, err := service.GetBookmark("nonexistent-id")
+
+	if err == nil {
+		t.Error("GetBookmark() should return error when bookmark not found")
+		return
+	}
+
+	expectedErrorSubstring := "failed to get bookmarks for id nonexistent-id"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("GetBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 func main() {
 	bookmarkRepo := repository.NewBookmarkInMemRepository()
-	bookmarkService := service.NewBookmarkService(bookmarkRepo)
+	bookmarkService := service.NewBookmarkService(&bookmarkRepo)
 	httpHandler := handler.NewHTTPHandler(bookmarkService)
 
 	e := echo.New()
@@ -21,6 +21,10 @@ func main() {
 
 	// Routes
 	e.GET("/ping", httpHandler.Ping)
+	e.POST("/bookmarks", httpHandler.CreateBookmark)
+	e.GET("/bookmarks/:id", httpHandler.GetBookmark)
+	e.GET("/bookmarks", httpHandler.GetBookmarks)
+	e.POST("/bookmarks/:id/archive", httpHandler.ArchiveBookmark)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":1323"))
