@@ -758,10 +758,19 @@ func TestBookmarkService_DeleteBookmark_NotFound(t *testing.T) {
 
 // TestNewBookmarkService tests service initialization
 func TestNewBookmarkService(t *testing.T) {
-	mockRepo := &MockBookmarkRepository{}
+	mockRepo := &MockBookmarkRepository{
+		getBookmarkFunc: func(id string) (model.Bookmark, error) {
+			return model.Bookmark{ID: "test-id"}, nil
+		},
+	}
 	service := NewBookmarkService(mockRepo)
 
-	if service.repository == nil {
-		t.Error("NewBookmarkService() should initialize repository")
+	// Verify service is usable by calling a method
+	result, err := service.GetBookmark("test-id")
+	if err != nil {
+		t.Errorf("NewBookmarkService() service should be functional, got error = %v", err)
+	}
+	if result.ID != "test-id" {
+		t.Error("NewBookmarkService() service should work correctly")
 	}
 }
