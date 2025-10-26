@@ -552,6 +552,210 @@ func TestBookmarkService_GetBookmark_NotFound(t *testing.T) {
 	}
 }
 
+// TestBookmarkService_GetAllBookmarks tests successful retrieval of all bookmarks for a user
+func TestBookmarkService_GetAllBookmarks(t *testing.T) {
+	expectedBookmarks := []model.Bookmark{
+		{
+			ID:        "bookmark-1",
+			UserID:    "user-1",
+			URL:       "https://example1.com",
+			Title:     "Example 1",
+			CreatedAt: time.Now(),
+		},
+		{
+			ID:        "bookmark-2",
+			UserID:    "user-1",
+			URL:       "https://example2.com",
+			Title:     "Example 2",
+			CreatedAt: time.Now(),
+		},
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+			if userID != "user-1" {
+				t.Errorf("ListBookmarks() received UserID = %v, want user-1", userID)
+			}
+			return expectedBookmarks, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	result, err := service.GetAllBookmarks("user-1")
+
+	if err != nil {
+		t.Errorf("GetAllBookmarks() unexpected error = %v", err)
+		return
+	}
+
+	if len(result) != 2 {
+		t.Errorf("GetAllBookmarks() returned %d bookmarks, want 2", len(result))
+		return
+	}
+
+	if result[0].ID != "bookmark-1" {
+		t.Errorf("GetAllBookmarks() first bookmark ID = %v, want bookmark-1", result[0].ID)
+	}
+	if result[1].ID != "bookmark-2" {
+		t.Errorf("GetAllBookmarks() second bookmark ID = %v, want bookmark-2", result[1].ID)
+	}
+}
+
+// TestBookmarkService_GetAllBookmarks_EmptyUserID tests getting bookmarks with empty userID
+func TestBookmarkService_GetAllBookmarks_EmptyUserID(t *testing.T) {
+	expectedBookmarks := []model.Bookmark{}
+
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+			if userID != "" {
+				t.Errorf("ListBookmarks() received UserID = %v, want empty string", userID)
+			}
+			return expectedBookmarks, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	result, err := service.GetAllBookmarks("")
+
+	if err != nil {
+		t.Errorf("GetAllBookmarks() with empty userID unexpected error = %v", err)
+		return
+	}
+
+	if len(result) != 0 {
+		t.Errorf("GetAllBookmarks() returned %d bookmarks, want 0", len(result))
+	}
+}
+
+// TestBookmarkService_GetAllBookmarks_RepositoryError tests error handling when repository fails
+func TestBookmarkService_GetAllBookmarks_RepositoryError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+			return nil, fmt.Errorf("database connection failed")
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	_, err := service.GetAllBookmarks("user-1")
+
+	if err == nil {
+		t.Error("GetAllBookmarks() should return error when repository fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to get all bookmarks"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("GetAllBookmarks() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_GetAllBookmarks_NoBookmarks tests getting bookmarks when user has none
+func TestBookmarkService_GetAllBookmarks_NoBookmarks(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+			return []model.Bookmark{}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	result, err := service.GetAllBookmarks("user-1")
+
+	if err != nil {
+		t.Errorf("GetAllBookmarks() unexpected error = %v", err)
+		return
+	}
+
+	if len(result) != 0 {
+		t.Errorf("GetAllBookmarks() returned %d bookmarks, want 0", len(result))
+	}
+}
+
+// TestBookmarkService_DeleteBookmark tests successful bookmark deletion
+func TestBookmarkService_DeleteBookmark(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		deleteBookmarkFunc: func(id string) error {
+			if id != "bookmark-1" {
+				t.Errorf("DeleteBookmark() received ID = %v, want bookmark-1", id)
+			}
+			return nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	err := service.DeleteBookmark("bookmark-1")
+
+	if err != nil {
+		t.Errorf("DeleteBookmark() unexpected error = %v", err)
+	}
+}
+
+// TestBookmarkService_DeleteBookmark_EmptyID tests deleting bookmark with empty ID
+func TestBookmarkService_DeleteBookmark_EmptyID(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		deleteBookmarkFunc: func(id string) error {
+			t.Error("DeleteBookmark() should not be called with empty ID")
+			return nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	err := service.DeleteBookmark("")
+
+	if err == nil {
+		t.Error("DeleteBookmark() should return error when ID is empty")
+		return
+	}
+
+	expectedError := "id is required"
+	if err.Error() != expectedError {
+		t.Errorf("DeleteBookmark() error = %v, want %v", err.Error(), expectedError)
+	}
+}
+
+// TestBookmarkService_DeleteBookmark_RepositoryError tests error handling when repository fails
+func TestBookmarkService_DeleteBookmark_RepositoryError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		deleteBookmarkFunc: func(id string) error {
+			return fmt.Errorf("database connection failed")
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	err := service.DeleteBookmark("bookmark-1")
+
+	if err == nil {
+		t.Error("DeleteBookmark() should return error when repository fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to delete bookmark with ID bookmark-1"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("DeleteBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_DeleteBookmark_NotFound tests deleting non-existent bookmark
+func TestBookmarkService_DeleteBookmark_NotFound(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		deleteBookmarkFunc: func(id string) error {
+			return fmt.Errorf("bookmark with ID %s not found", id)
+		},
+	}
+
+	service := NewBookmarkService(mockRepo)
+	err := service.DeleteBookmark("nonexistent-id")
+
+	if err == nil {
+		t.Error("DeleteBookmark() should return error when bookmark not found")
+		return
+	}
+
+	expectedErrorSubstring := "failed to delete bookmark with ID nonexistent-id"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("DeleteBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
 // TestNewBookmarkService tests service initialization
 func TestNewBookmarkService(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{}
