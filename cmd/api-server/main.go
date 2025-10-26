@@ -10,7 +10,7 @@ import (
 
 func main() {
 	bookmarkRepo := repository.NewBookmarkInMemRepository()
-	bookmarkService := service.NewBookmarkService(&bookmarkRepo)
+	bookmarkService := service.NewBookmarkService(bookmarkRepo)
 	httpHandler := handler.NewHTTPHandler(bookmarkService)
 
 	e := echo.New()

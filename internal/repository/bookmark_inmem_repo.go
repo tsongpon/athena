@@ -17,8 +17,8 @@ type BookmarkInMemRepository struct {
 }
 
 // NewBookmarkInMemRepository creates a new instance of BookmarkInMemRepository
-func NewBookmarkInMemRepository() BookmarkInMemRepository {
-	return BookmarkInMemRepository{
+func NewBookmarkInMemRepository() *BookmarkInMemRepository {
+	return &BookmarkInMemRepository{
 		bookmarks: make(map[string]model.Bookmark),
 		mutex:     sync.RWMutex{},
 	}

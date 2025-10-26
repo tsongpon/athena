@@ -5,15 +5,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tsongpon/athena/internal/model"
-	"github.com/tsongpon/athena/internal/service"
 	"github.com/tsongpon/athena/internal/transport"
 )
 
 type HTTPHandler struct {
-	bookmarkService service.BookmarkService
+	bookmarkService BookmarkService
 }
 
-func NewHTTPHandler(service service.BookmarkService) HTTPHandler {
+func NewHTTPHandler(service BookmarkService) HTTPHandler {
 	return HTTPHandler{
 		bookmarkService: service,
 	}

@@ -7,28 +7,19 @@ import (
 	"github.com/tsongpon/athena/internal/model"
 )
 
-// BookmarkService defines the interface for bookmark business logic operations
-type BookmarkService interface {
-	CreateBookmark(b model.Bookmark) (model.Bookmark, error)
-	ArchiveBookmark(id string) (model.Bookmark, error)
-	GetBookmark(id string) (model.Bookmark, error)
-	GetAllBookmarks(userID string) ([]model.Bookmark, error)
-	DeleteBookmark(id string) error
-}
-
 // bookmarkService is the concrete implementation of BookmarkService interface
-type bookmarkService struct {
+type BookmarkService struct {
 	repository BookmarkRepository
 }
 
 // NewBookmarkService creates a new instance of BookmarkService
-func NewBookmarkService(repo BookmarkRepository) BookmarkService {
-	return &bookmarkService{
+func NewBookmarkService(repo BookmarkRepository) *BookmarkService {
+	return &BookmarkService{
 		repository: repo,
 	}
 }
 
-func (s *bookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, error) {
+func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, error) {
 	if b.ID != "" {
 		return model.Bookmark{}, fmt.Errorf("bookmark ID must be empty")
 	}
@@ -42,7 +33,7 @@ func (s *bookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	return createdBookmark, nil
 }
 
-func (s *bookmarkService) ArchiveBookmark(id string) (model.Bookmark, error) {
+func (s *BookmarkService) ArchiveBookmark(id string) (model.Bookmark, error) {
 	b, err := s.repository.GetBookmark(id)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to get bookmark with ID %s: %w", id, err)
@@ -56,7 +47,7 @@ func (s *bookmarkService) ArchiveBookmark(id string) (model.Bookmark, error) {
 	return updated, nil
 }
 
-func (s *bookmarkService) GetBookmark(id string) (model.Bookmark, error) {
+func (s *BookmarkService) GetBookmark(id string) (model.Bookmark, error) {
 	if id == "" {
 		return model.Bookmark{}, fmt.Errorf("id is required")
 	}
@@ -68,7 +59,7 @@ func (s *bookmarkService) GetBookmark(id string) (model.Bookmark, error) {
 	return bookmarks, nil
 }
 
-func (s *bookmarkService) GetAllBookmarks(userID string) ([]model.Bookmark, error) {
+func (s *BookmarkService) GetAllBookmarks(userID string) ([]model.Bookmark, error) {
 	bookmarks, err := s.repository.ListBookmarks(userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all bookmarks: %w", err)
@@ -77,7 +68,7 @@ func (s *bookmarkService) GetAllBookmarks(userID string) ([]model.Bookmark, erro
 	return bookmarks, nil
 }
 
-func (s *bookmarkService) DeleteBookmark(id string) error {
+func (s *BookmarkService) DeleteBookmark(id string) error {
 	if id == "" {
 		return fmt.Errorf("id is required")
 	}
