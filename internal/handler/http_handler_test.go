@@ -18,7 +18,7 @@ type MockBookmarkService struct {
 	createBookmarkFunc  func(bookmark model.Bookmark) (model.Bookmark, error)
 	archiveBookmarkFunc func(id string) (model.Bookmark, error)
 	getBookmarkFunc     func(id string) (model.Bookmark, error)
-	getAllBookmarksFunc func(userID string) ([]model.Bookmark, error)
+	getAllBookmarksFunc func(userID string, archived bool) ([]model.Bookmark, error)
 	deleteBookmarkFunc  func(id string) error
 }
 
@@ -43,9 +43,9 @@ func (m *MockBookmarkService) GetBookmark(id string) (model.Bookmark, error) {
 	return model.Bookmark{}, nil
 }
 
-func (m *MockBookmarkService) GetAllBookmarks(userID string) ([]model.Bookmark, error) {
+func (m *MockBookmarkService) GetAllBookmarks(userID string, archived bool) ([]model.Bookmark, error) {
 	if m.getAllBookmarksFunc != nil {
-		return m.getAllBookmarksFunc(userID)
+		return m.getAllBookmarksFunc(userID, archived)
 	}
 	return []model.Bookmark{}, nil
 }
@@ -280,7 +280,7 @@ func TestHTTPHandler_GetBookmark_ServiceError(t *testing.T) {
 // TestHTTPHandler_GetBookmarks tests successful retrieval of all bookmarks
 func TestHTTPHandler_GetBookmarks(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/bookmarks?userid=user-123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/bookmarks?user_id=user-123&archived=false", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -302,7 +302,7 @@ func TestHTTPHandler_GetBookmarks(t *testing.T) {
 	}
 
 	mockService := &MockBookmarkService{
-		getAllBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		getAllBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			if userID != "user-123" {
 				t.Errorf("GetAllBookmarks() received UserID = %v, want user-123", userID)
 			}
@@ -344,10 +344,8 @@ func TestHTTPHandler_GetBookmarks_EmptyUserID(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	mockService := &MockBookmarkService{
-		getAllBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
-			if userID != "" {
-				t.Errorf("GetAllBookmarks() received UserID = %v, want empty string", userID)
-			}
+		getAllBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			t.Error("GetAllBookmarks() should not be called when user_id is empty")
 			return []model.Bookmark{}, nil
 		},
 	}
@@ -355,24 +353,27 @@ func TestHTTPHandler_GetBookmarks_EmptyUserID(t *testing.T) {
 	handler := NewHTTPHandler(mockService)
 	err := handler.GetBookmarks(c)
 
-	if err != nil {
-		t.Errorf("GetBookmarks() unexpected error = %v", err)
+	if err == nil {
+		t.Error("GetBookmarks() should return error when user_id is empty")
 	}
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("GetBookmarks() status code = %d, want %d", rec.Code, http.StatusOK)
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Error("GetBookmarks() should return HTTPError")
+	} else if httpErr.Code != http.StatusBadRequest {
+		t.Errorf("GetBookmarks() error code = %d, want %d", httpErr.Code, http.StatusBadRequest)
 	}
 }
 
 // TestHTTPHandler_GetBookmarks_ServiceError tests error handling from service
 func TestHTTPHandler_GetBookmarks_ServiceError(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/bookmarks?userid=user-123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/bookmarks?user_id=user-123&archived=false", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
 	mockService := &MockBookmarkService{
-		getAllBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		getAllBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			return nil, fmt.Errorf("database error")
 		},
 	}
@@ -388,12 +389,12 @@ func TestHTTPHandler_GetBookmarks_ServiceError(t *testing.T) {
 // TestHTTPHandler_GetBookmarks_EmptyResult tests getting bookmarks with no results
 func TestHTTPHandler_GetBookmarks_EmptyResult(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/bookmarks?userid=user-123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/bookmarks?user_id=user-123&archived=false", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
 	mockService := &MockBookmarkService{
-		getAllBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		getAllBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			return []model.Bookmark{}, nil
 		},
 	}

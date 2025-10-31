@@ -56,15 +56,15 @@ func (r *BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error)
 	return bookmark, nil
 }
 
-// ListBookmarks retrieves all bookmarks for a specific user
-func (r *BookmarkInMemRepository) ListBookmarks(userID string) ([]model.Bookmark, error) {
+// ListBookmarks retrieves all bookmarks based on the query parameters
+func (r *BookmarkInMemRepository) ListBookmarks(query model.BookmarkQuery) ([]model.Bookmark, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
 	var userBookmarks []model.Bookmark
 
 	for _, bookmark := range r.bookmarks {
-		if bookmark.UserID == userID {
+		if bookmark.UserID == query.UserID && bookmark.IsArchived == query.Archived {
 			userBookmarks = append(userBookmarks, bookmark)
 		}
 	}

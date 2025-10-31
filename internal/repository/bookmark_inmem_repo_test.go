@@ -313,7 +313,7 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 	}
 
 	// Test listing bookmarks for user1
-	result, err := repo.ListBookmarks("user1")
+	result, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() unexpected error = %v", err)
 		return
@@ -332,7 +332,7 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 	}
 
 	// Test listing bookmarks for user2
-	result, err = repo.ListBookmarks("user2")
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user2", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() unexpected error = %v", err)
 		return
@@ -348,7 +348,7 @@ func TestBookmarkInMemRepository_ListBookmarks(t *testing.T) {
 	}
 
 	// Test listing bookmarks for non-existent user
-	result, err = repo.ListBookmarks("nonexistent")
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "nonexistent", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() unexpected error = %v", err)
 		return
@@ -452,7 +452,7 @@ func TestBookmarkInMemRepository_DeleteBookmark(t *testing.T) {
 	}
 
 	// Verify bookmark is actually deleted
-	bookmarks, err := repo.ListBookmarks("user1")
+	bookmarks, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() after delete failed: %v", err)
 		return
@@ -491,7 +491,7 @@ func TestBookmarkInMemRepository_EmptyRepository(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
 	// Test listing bookmarks in empty repository
-	bookmarks, err := repo.ListBookmarks("user1")
+	bookmarks, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() on empty repository failed: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 	totalBookmarks := 0
 	for i := 0; i < numGoroutines; i++ {
 		userID := fmt.Sprintf("user_%d", i)
-		bookmarks, err := repo.ListBookmarks(userID)
+		bookmarks, err := repo.ListBookmarks(model.BookmarkQuery{UserID: userID, Archived: false})
 		if err != nil {
 			t.Errorf("ListBookmarks() after concurrent creates failed: %v", err)
 		}
@@ -637,7 +637,7 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			userID := fmt.Sprintf("user_%d", goroutineID)
 			for j := 0; j < 5; j++ {
-				_, err := repo.ListBookmarks(userID)
+				_, err := repo.ListBookmarks(model.BookmarkQuery{UserID: userID, Archived: false})
 				if err != nil {
 					t.Errorf("Concurrent ListBookmarks() error: %v", err)
 				}
@@ -691,7 +691,7 @@ func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 	}
 
 	// Test listing bookmarks for empty userID
-	bookmarks, err := repo.ListBookmarks("")
+	bookmarks, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() with empty userID failed: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 	}
 
 	// Verify it can be retrieved
-	bookmarks, err = repo.ListBookmarks("user@#$%^&*()")
+	bookmarks, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user@#$%^&*()", Archived: false})
 	if err != nil {
 		t.Errorf("ListBookmarks() with special character userID failed: %v", err)
 	}

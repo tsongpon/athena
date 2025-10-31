@@ -24,6 +24,7 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 		return model.Bookmark{}, fmt.Errorf("bookmark ID must be empty")
 	}
 	//TODO: fetch title and set it to bookmark.Title
+	b.IsArchived = false
 	createdBookmark, err := s.repository.CreateBookmark(b)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to create bookmark for URL %s: %w", b.URL, err)
@@ -59,8 +60,12 @@ func (s *BookmarkService) GetBookmark(id string) (model.Bookmark, error) {
 	return bookmarks, nil
 }
 
-func (s *BookmarkService) GetAllBookmarks(userID string) ([]model.Bookmark, error) {
-	bookmarks, err := s.repository.ListBookmarks(userID)
+func (s *BookmarkService) GetAllBookmarks(userID string, archived bool) ([]model.Bookmark, error) {
+	query := model.BookmarkQuery{
+		UserID:   userID,
+		Archived: archived,
+	}
+	bookmarks, err := s.repository.ListBookmarks(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all bookmarks: %w", err)
 	}

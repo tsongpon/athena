@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tsongpon/athena/internal/model"
@@ -12,8 +13,8 @@ type HTTPHandler struct {
 	bookmarkService BookmarkService
 }
 
-func NewHTTPHandler(service BookmarkService) HTTPHandler {
-	return HTTPHandler{
+func NewHTTPHandler(service BookmarkService) *HTTPHandler {
+	return &HTTPHandler{
 		bookmarkService: service,
 	}
 }
@@ -27,15 +28,28 @@ func (h *HTTPHandler) CreateBookmark(c echo.Context) error {
 	if err := c.Bind(bt); err != nil {
 		return err
 	}
+	if bt.URL == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "URL is required")
+	}
+	if bt.UserID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "User ID is required")
+	}
 	b := model.Bookmark{
-		URL:        bt.URL,
-		UserID:     bt.UserID,
-		IsArchived: false,
+		URL:    bt.URL,
+		UserID: bt.UserID,
 	}
-	if _, err := h.bookmarkService.CreateBookmark(b); err != nil {
-		return err
+	createdBookmark, err := h.bookmarkService.CreateBookmark(b)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
-	return c.NoContent(http.StatusCreated)
+	responseTransport := transport.BookmarkTransport{
+		ID:         createdBookmark.ID,
+		URL:        createdBookmark.URL,
+		Title:      createdBookmark.Title,
+		UserID:     createdBookmark.UserID,
+		IsArchived: createdBookmark.IsArchived,
+	}
+	return c.JSON(http.StatusCreated, responseTransport)
 }
 
 func (h *HTTPHandler) GetBookmark(c echo.Context) error {
@@ -48,28 +62,38 @@ func (h *HTTPHandler) GetBookmark(c echo.Context) error {
 		return err
 	}
 	t := transport.BookmarkTransport{
-		ID:     bookmarks.ID,
-		URL:    bookmarks.URL,
-		Title:  bookmarks.Title,
-		UserID: bookmarks.UserID,
+		ID:         bookmarks.ID,
+		URL:        bookmarks.URL,
+		Title:      bookmarks.Title,
+		UserID:     bookmarks.UserID,
+		IsArchived: bookmarks.IsArchived,
 	}
 	return c.JSON(http.StatusOK, t)
 }
 
 func (h *HTTPHandler) GetBookmarks(c echo.Context) error {
-	userID := c.QueryParam("userid")
-	bookmarks, err := h.bookmarkService.GetAllBookmarks(userID)
+	userID := c.QueryParam("user_id")
+	archivedParam := c.QueryParam("archived")
+	if userID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "User ID is required")
+	}
+	archived, err := strconv.ParseBool(archivedParam)
+	if err != nil {
+		archived = false
+	}
+	bookmarks, err := h.bookmarkService.GetAllBookmarks(userID, archived)
 	if err != nil {
 		return err
 	}
 	ts := make([]transport.BookmarkTransport, len(bookmarks))
 	for i, b := range bookmarks {
 		ts[i] = transport.BookmarkTransport{
-			ID:        b.ID,
-			URL:       b.URL,
-			Title:     b.Title,
-			UserID:    b.UserID,
-			CreatedAt: b.CreatedAt,
+			ID:         b.ID,
+			URL:        b.URL,
+			Title:      b.Title,
+			UserID:     b.UserID,
+			CreatedAt:  b.CreatedAt,
+			IsArchived: b.IsArchived,
 		}
 	}
 	return c.JSON(http.StatusOK, ts)

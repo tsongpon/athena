@@ -12,7 +12,7 @@ import (
 type MockBookmarkRepository struct {
 	createBookmarkFunc func(bookmark model.Bookmark) (model.Bookmark, error)
 	getBookmarkFunc    func(id string) (model.Bookmark, error)
-	listBookmarksFunc  func(userID string) ([]model.Bookmark, error)
+	listBookmarksFunc  func(userID string, archived bool) ([]model.Bookmark, error)
 	updateBookmarkFunc func(bookmark model.Bookmark) (model.Bookmark, error)
 	deleteBookmarkFunc func(id string) error
 }
@@ -31,9 +31,9 @@ func (m *MockBookmarkRepository) GetBookmark(id string) (model.Bookmark, error) 
 	return model.Bookmark{}, nil
 }
 
-func (m *MockBookmarkRepository) ListBookmarks(userID string) ([]model.Bookmark, error) {
+func (m *MockBookmarkRepository) ListBookmarks(query model.BookmarkQuery) ([]model.Bookmark, error) {
 	if m.listBookmarksFunc != nil {
-		return m.listBookmarksFunc(userID)
+		return m.listBookmarksFunc(query.UserID, query.Archived)
 	}
 	return []model.Bookmark{}, nil
 }
@@ -572,7 +572,7 @@ func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	}
 
 	mockRepo := &MockBookmarkRepository{
-		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			if userID != "user-1" {
 				t.Errorf("ListBookmarks() received UserID = %v, want user-1", userID)
 			}
@@ -581,7 +581,7 @@ func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.GetAllBookmarks("user-1")
+	result, err := service.GetAllBookmarks("user-1", false)
 
 	if err != nil {
 		t.Errorf("GetAllBookmarks() unexpected error = %v", err)
@@ -606,7 +606,7 @@ func TestBookmarkService_GetAllBookmarks_EmptyUserID(t *testing.T) {
 	expectedBookmarks := []model.Bookmark{}
 
 	mockRepo := &MockBookmarkRepository{
-		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			if userID != "" {
 				t.Errorf("ListBookmarks() received UserID = %v, want empty string", userID)
 			}
@@ -615,7 +615,7 @@ func TestBookmarkService_GetAllBookmarks_EmptyUserID(t *testing.T) {
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.GetAllBookmarks("")
+	result, err := service.GetAllBookmarks("", false)
 
 	if err != nil {
 		t.Errorf("GetAllBookmarks() with empty userID unexpected error = %v", err)
@@ -630,13 +630,13 @@ func TestBookmarkService_GetAllBookmarks_EmptyUserID(t *testing.T) {
 // TestBookmarkService_GetAllBookmarks_RepositoryError tests error handling when repository fails
 func TestBookmarkService_GetAllBookmarks_RepositoryError(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{
-		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			return nil, fmt.Errorf("database connection failed")
 		},
 	}
 
 	service := NewBookmarkService(mockRepo)
-	_, err := service.GetAllBookmarks("user-1")
+	_, err := service.GetAllBookmarks("user-1", false)
 
 	if err == nil {
 		t.Error("GetAllBookmarks() should return error when repository fails")
@@ -652,13 +652,13 @@ func TestBookmarkService_GetAllBookmarks_RepositoryError(t *testing.T) {
 // TestBookmarkService_GetAllBookmarks_NoBookmarks tests getting bookmarks when user has none
 func TestBookmarkService_GetAllBookmarks_NoBookmarks(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{
-		listBookmarksFunc: func(userID string) ([]model.Bookmark, error) {
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
 			return []model.Bookmark{}, nil
 		},
 	}
 
 	service := NewBookmarkService(mockRepo)
-	result, err := service.GetAllBookmarks("user-1")
+	result, err := service.GetAllBookmarks("user-1", false)
 
 	if err != nil {
 		t.Errorf("GetAllBookmarks() unexpected error = %v", err)

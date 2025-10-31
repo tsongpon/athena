@@ -10,3 +10,9 @@ type Bookmark struct {
 	IsArchived bool
 	CreatedAt  time.Time
 }
+
+// BookmarkQuery represents query parameters for listing bookmarks
+type BookmarkQuery struct {
+	UserID   string
+	Archived bool
+}
