@@ -2,13 +2,14 @@ package repository
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
+	"go.uber.org/zap"
 )
 
 // BookmarkInMemRepository implements BookmarkRepository interface using an in-memory map
@@ -48,7 +49,7 @@ func (r *BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error)
 	defer r.mutex.RUnlock()
 
 	// Check if bookmark exists
-	log.Printf("Getting bookmark with ID %s", id)
+	logger.Debug("Getting bookmark", zap.String("id", id))
 	bookmark, exists := r.bookmarks[id]
 	if !exists {
 		return model.Bookmark{}, fmt.Errorf("bookmark with ID %s not found", id)

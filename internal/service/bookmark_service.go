@@ -2,20 +2,23 @@ package service
 
 import (
 	"fmt"
-	"log"
 
+	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
+	"go.uber.org/zap"
 )
 
 // bookmarkService is the concrete implementation of BookmarkService interface
 type BookmarkService struct {
-	repository BookmarkRepository
+	bookmarkRepository BookmarkRepository
+	webRepository      WebRepository
 }
 
 // NewBookmarkService creates a new instance of BookmarkService
-func NewBookmarkService(repo BookmarkRepository) *BookmarkService {
+func NewBookmarkService(bookmarkRepo BookmarkRepository, webrepo WebRepository) *BookmarkService {
 	return &BookmarkService{
-		repository: repo,
+		bookmarkRepository: bookmarkRepo,
+		webRepository:      webrepo,
 	}
 }
 
@@ -23,24 +26,33 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if b.ID != "" {
 		return model.Bookmark{}, fmt.Errorf("bookmark ID must be empty")
 	}
-	//TODO: fetch title and set it to bookmark.Title
+
+	webTitle, err := s.webRepository.GetTitle(b.URL)
+	if err != nil {
+		return model.Bookmark{}, fmt.Errorf("failed to fetch title for URL %s: %w", b.URL, err)
+	}
+	b.Title = webTitle
 	b.IsArchived = false
-	createdBookmark, err := s.repository.CreateBookmark(b)
+	createdBookmark, err := s.bookmarkRepository.CreateBookmark(b)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to create bookmark for URL %s: %w", b.URL, err)
 	}
-	log.Printf("Created bookmark with ID %s", createdBookmark.ID)
+	logger.Info("Created bookmark",
+		zap.String("id", createdBookmark.ID),
+		zap.String("user_id", createdBookmark.UserID),
+		zap.String("url", createdBookmark.URL),
+		zap.String("title", createdBookmark.Title))
 
 	return createdBookmark, nil
 }
 
 func (s *BookmarkService) ArchiveBookmark(id string) (model.Bookmark, error) {
-	b, err := s.repository.GetBookmark(id)
+	b, err := s.bookmarkRepository.GetBookmark(id)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to get bookmark with ID %s: %w", id, err)
 	}
 	b.IsArchived = true
-	updated, err := s.repository.UpdateBookmark(b)
+	updated, err := s.bookmarkRepository.UpdateBookmark(b)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to update bookmark with ID %s: %w", b.ID, err)
 	}
@@ -52,7 +64,7 @@ func (s *BookmarkService) GetBookmark(id string) (model.Bookmark, error) {
 	if id == "" {
 		return model.Bookmark{}, fmt.Errorf("id is required")
 	}
-	bookmarks, err := s.repository.GetBookmark(id)
+	bookmarks, err := s.bookmarkRepository.GetBookmark(id)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to get bookmarks for id %s: %w", id, err)
 	}
@@ -65,7 +77,7 @@ func (s *BookmarkService) GetAllBookmarks(userID string, archived bool) ([]model
 		UserID:   userID,
 		Archived: archived,
 	}
-	bookmarks, err := s.repository.ListBookmarks(query)
+	bookmarks, err := s.bookmarkRepository.ListBookmarks(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all bookmarks: %w", err)
 	}
@@ -77,7 +89,7 @@ func (s *BookmarkService) DeleteBookmark(id string) error {
 	if id == "" {
 		return fmt.Errorf("id is required")
 	}
-	err := s.repository.DeleteBookmark(id)
+	err := s.bookmarkRepository.DeleteBookmark(id)
 	if err != nil {
 		return fmt.Errorf("failed to delete bookmark with ID %s: %w", id, err)
 	}

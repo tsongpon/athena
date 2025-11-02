@@ -8,13 +8,24 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tsongpon/athena/internal/handler"
+	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/repository"
 	"github.com/tsongpon/athena/internal/service"
+	"go.uber.org/zap"
 )
 
 func main() {
+	// Initialize logger
+	if err := logger.Initialize(); err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
+	defer logger.Sync()
+
+	logger.Info("Starting Athena API server")
+
 	bookmarkRepo := repository.NewBookmarkInMemRepository()
-	bookmarkService := service.NewBookmarkService(bookmarkRepo)
+	webRepo := repository.NewWebRepository()
+	bookmarkService := service.NewBookmarkService(bookmarkRepo, webRepo)
 
 	userRepo := repository.NewUserInMemRepository()
 	userService := service.NewUserService(userRepo)
@@ -25,7 +36,7 @@ func main() {
 	e := echo.New()
 
 	// Middleware
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
@@ -60,5 +71,8 @@ func main() {
 	e.POST("/bookmarks/:id/archive", bookmarkHandler.ArchiveBookmark, echojwt.WithConfig(jwtConfig))
 
 	// Start server
-	e.Logger.Fatal(e.Start(":1323"))
+	logger.Info("Server starting on port 1323")
+	if err := e.Start(":1323"); err != nil {
+		logger.Fatal("Server failed to start", zap.Error(err))
+	}
 }

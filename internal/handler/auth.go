@@ -6,8 +6,10 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
 	"github.com/tsongpon/athena/internal/transport"
+	"go.uber.org/zap"
 )
 
 const (
@@ -54,14 +56,18 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	user, err := h.userService.AuthenticateUser(req.Email, req.Password)
 	if err != nil {
 		// Return generic error to prevent user enumeration
+		logger.Warn("Failed login attempt", zap.String("email", req.Email), zap.Error(err))
 		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid email or password")
 	}
 
 	// Generate JWT token
 	token, expiresAt, err := generateJWT(user.ID, user.Email, user.Name)
 	if err != nil {
+		logger.Error("Failed to generate JWT token", zap.String("user_id", user.ID), zap.Error(err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
 	}
+
+	logger.Info("User logged in successfully", zap.String("user_id", user.ID), zap.String("email", user.Email))
 
 	// Calculate expires_in (seconds until expiration)
 	expiresIn := time.Until(expiresAt).Seconds()
@@ -114,19 +120,25 @@ func (h *AuthHandler) CreateUser(c echo.Context) error {
 		if err.Error() == "email is required" ||
 			err.Error() == "password is required" ||
 			err.Error() == "name is required" {
+			logger.Warn("Invalid user creation request", zap.String("email", req.Email), zap.Error(err))
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		if err.Error() == "password length exceeds 72 bytes" {
+			logger.Warn("Password too long", zap.String("email", req.Email))
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		// Check for duplicate email error
 		if err.Error() != "" && (err.Error() == "user ID must be empty" ||
 			containsString(err.Error(), "already exists")) {
+			logger.Warn("Duplicate email registration attempt", zap.String("email", req.Email))
 			return echo.NewHTTPError(http.StatusConflict, "User with this email already exists")
 		}
 		// Generic server error
+		logger.Error("Failed to create user", zap.String("email", req.Email), zap.Error(err))
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create user")
 	}
+
+	logger.Info("User created successfully", zap.String("user_id", createdUser.ID), zap.String("email", createdUser.Email))
 
 	// Build response (excluding password)
 	resp := transport.UserResponse{

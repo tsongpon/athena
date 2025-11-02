@@ -15,3 +15,7 @@ type BookmarkRepository interface {
 	UpdateBookmark(bookmark model.Bookmark) (model.Bookmark, error)
 	DeleteBookmark(id string) error
 }
+
+type WebRepository interface {
+	GetTitle(url string) (string, error)
+}

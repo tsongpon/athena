@@ -5,8 +5,10 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
 	"github.com/tsongpon/athena/internal/transport"
+	"go.uber.org/zap"
 )
 
 type BookmarkHandler struct {
@@ -26,15 +28,18 @@ func (h *BookmarkHandler) Ping(c echo.Context) error {
 func (h *BookmarkHandler) CreateBookmark(c echo.Context) error {
 	bt := &transport.BookmarkTransport{}
 	if err := c.Bind(bt); err != nil {
+		logger.Warn("Failed to bind bookmark request", zap.Error(err))
 		return err
 	}
 	if bt.URL == "" {
+		logger.Warn("Create bookmark request missing URL")
 		return echo.NewHTTPError(http.StatusBadRequest, "URL is required")
 	}
 
 	// Get authenticated user ID from JWT token
 	authenticatedUser, err := getAuthenticatedUser(c)
 	if err != nil {
+		logger.Error("Failed to get authenticated user", zap.Error(err))
 		return err
 	}
 
@@ -44,8 +49,16 @@ func (h *BookmarkHandler) CreateBookmark(c echo.Context) error {
 	}
 	createdBookmark, err := h.bookmarkService.CreateBookmark(b)
 	if err != nil {
+		logger.Error("Failed to create bookmark",
+			zap.String("user_id", authenticatedUser.UserID),
+			zap.String("url", bt.URL),
+			zap.Error(err))
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+	logger.Info("Bookmark created via API",
+		zap.String("bookmark_id", createdBookmark.ID),
+		zap.String("user_id", createdBookmark.UserID),
+		zap.String("url", createdBookmark.URL))
 	responseTransport := transport.BookmarkTransport{
 		ID:         createdBookmark.ID,
 		URL:        createdBookmark.URL,

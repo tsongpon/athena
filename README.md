@@ -15,9 +15,12 @@ Athena is a lightweight RESTful API service for managing bookmarks. It provides 
 - ✅ User-specific bookmark collections with access control
 - ✅ Auto-generated UUID for bookmark and user IDs
 - ✅ Password hashing with bcrypt
+- ✅ Structured logging with Uber's Zap (development and production modes)
+- ✅ Automatic website title fetching for bookmarks
 - ✅ In-memory storage with repository pattern (easy to extend to database)
 - ✅ Clean architecture with separation of concerns (handler, service, repository layers)
 - ✅ Built-in logging, CORS, and recovery middleware
+- ✅ Docker support with multi-stage builds
 - ✅ Comprehensive test coverage (95.9% handler, 100% repository, 98.4% service)
 
 ## Tech Stack
@@ -25,8 +28,10 @@ Athena is a lightweight RESTful API service for managing bookmarks. It provides 
 - **Language**: Go 1.25.1
 - **Web Framework**: [Echo v4](https://echo.labstack.com/)
 - **Authentication**: JWT with [golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) & [echo-jwt/v4](https://github.com/labstack/echo-jwt)
+- **Logging**: [Uber Zap](https://github.com/uber-go/zap)
 - **Password Hashing**: bcrypt
 - **ID Generation**: [Google UUID](https://github.com/google/uuid)
+- **HTML Parsing**: [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html)
 - **Testing**: [testify](https://github.com/stretchr/testify)
 
 ## Project Structure
@@ -84,9 +89,14 @@ cd athena
 go mod download
 ```
 
-3. Set JWT secret (optional, defaults to development secret):
+3. Configure environment variables (all optional):
 ```bash
+# JWT secret (defaults to development secret)
 export JWT_SECRET="your-super-secret-key-change-this-in-production"
+
+# Logging configuration
+export APP_ENV="production"  # Use "production" for JSON logs, default is development
+export LOG_LEVEL="info"      # Options: debug, info, warn, error, fatal
 ```
 
 ### Running the Server
@@ -936,10 +946,34 @@ Error response format:
 }
 ```
 
+## Logging
+
+Athena uses [Uber Zap](https://github.com/uber-go/zap) for structured, high-performance logging.
+
+### Configuration
+
+- **Development Mode** (default): Console output with colors, debug level
+- **Production Mode** (`APP_ENV=production`): JSON formatted logs, info level
+- **Custom Log Level**: Set `LOG_LEVEL` environment variable (debug, info, warn, error, fatal)
+
+### Example Logs
+
+**Development:**
+```
+2024-01-15T10:30:45.123+0700    INFO    service/bookmark_service.go:42    Created bookmark    {"id": "abc123", "user_id": "user1"}
+```
+
+**Production:**
+```json
+{"level":"info","timestamp":"2024-01-15T10:30:45.123Z","msg":"Created bookmark","id":"abc123","user_id":"user1"}
+```
+
+For detailed logging documentation, see [docs/logging.md](docs/logging.md).
+
 ## Future Enhancements
 
 - [ ] Database persistence (PostgreSQL, MySQL, MongoDB)
-- [ ] Bookmark title fetching from URL metadata
+- [x] Bookmark title fetching from URL metadata
 - [ ] Full-text search across bookmarks
 - [ ] Tagging/categorization system
 - [ ] Bookmark collections/folders
