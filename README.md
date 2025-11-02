@@ -91,13 +91,35 @@ export JWT_SECRET="your-super-secret-key-change-this-in-production"
 
 ### Running the Server
 
+#### Option 1: Run Locally with Go
+
 ```bash
 go run cmd/api-server/main.go
 ```
 
 The server will start on `http://localhost:1323`
 
+#### Option 2: Run with Docker
+
+```bash
+# Build and run with docker-compose
+docker-compose up -d
+
+# Or build and run manually
+docker build -t athena:latest .
+docker run -p 1323:1323 -e JWT_SECRET="your-secret-key" athena:latest
+```
+
+The server will be available at `http://localhost:1323`
+
+To stop the Docker container:
+```bash
+docker-compose down
+```
+
 ### Building
+
+#### Build Native Binary
 
 ```bash
 go build -o athena cmd/api-server/main.go
@@ -110,6 +132,12 @@ cd cmd/api-server
 go build -o ../../athena
 cd ../..
 ./athena
+```
+
+#### Build Docker Image
+
+```bash
+docker build -t athena:latest .
 ```
 
 ## API Endpoints
@@ -515,6 +543,184 @@ type JWTClaims struct {
 }
 ```
 
+## Docker
+
+The application includes Docker support for easy deployment and development.
+
+### Quick Start with Docker
+
+```bash
+# Using docker-compose (recommended)
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f athena
+
+# Stop
+docker-compose down
+```
+
+### Docker Configuration
+
+#### Environment Variables
+
+Set environment variables via `.env` file:
+
+```bash
+# Copy example file
+cp .env.example .env
+
+# Edit .env and set your JWT_SECRET
+nano .env
+```
+
+Or pass environment variables directly:
+
+```bash
+docker run -p 1323:1323 \
+  -e JWT_SECRET="your-strong-secret-key" \
+  athena:latest
+```
+
+#### Docker Compose
+
+The `docker-compose.yml` file includes:
+
+- **athena service**: The API server
+- **Health checks**: Automatic health monitoring
+- **Port mapping**: 1323:1323
+- **Auto-restart**: Unless manually stopped
+
+Future database integration is commented out and ready to enable.
+
+### Building the Docker Image
+
+```bash
+# Build image
+docker build -t athena:latest .
+
+# Build with custom tag
+docker build -t athena:v1.0.0 .
+
+# Build with no cache
+docker build --no-cache -t athena:latest .
+```
+
+### Running the Docker Container
+
+```bash
+# Run in foreground
+docker run -p 1323:1323 athena:latest
+
+# Run in background (detached)
+docker run -d -p 1323:1323 --name athena-api athena:latest
+
+# Run with custom JWT secret
+docker run -d -p 1323:1323 \
+  -e JWT_SECRET="$(openssl rand -base64 32)" \
+  --name athena-api \
+  athena:latest
+
+# Run with volume mount (for future file storage)
+docker run -d -p 1323:1323 \
+  -v $(pwd)/data:/app/data \
+  --name athena-api \
+  athena:latest
+```
+
+### Docker Container Management
+
+```bash
+# View running containers
+docker ps
+
+# View logs
+docker logs athena-api
+docker logs -f athena-api  # Follow logs
+
+# Stop container
+docker stop athena-api
+
+# Start container
+docker start athena-api
+
+# Restart container
+docker restart athena-api
+
+# Remove container
+docker rm athena-api
+
+# Remove image
+docker rmi athena:latest
+```
+
+### Health Check
+
+The Docker image includes a built-in health check:
+
+```bash
+# Check container health
+docker inspect --format='{{.State.Health.Status}}' athena-api
+
+# View health check logs
+docker inspect --format='{{json .State.Health}}' athena-api | jq
+```
+
+Health check endpoint: `GET /ping`
+- Interval: 30 seconds
+- Timeout: 3 seconds
+- Retries: 3
+- Start period: 5 seconds
+
+### Multi-stage Build
+
+The Dockerfile uses a multi-stage build for optimal image size:
+
+1. **Builder stage**: Uses `golang:1.25.1-alpine` to compile the binary
+2. **Runtime stage**: Uses `alpine:latest` with only the compiled binary
+
+Benefits:
+- Small image size (~20MB vs ~800MB with full Go image)
+- No Go toolchain in final image (security)
+- Static binary with no external dependencies
+- Runs as non-root user for security
+
+### Docker Best Practices Implemented
+
+- ✅ Multi-stage build for minimal image size
+- ✅ Non-root user (user `athena`, UID 1000)
+- ✅ Health checks for container monitoring
+- ✅ `.dockerignore` to exclude unnecessary files
+- ✅ Static binary (CGO_ENABLED=0)
+- ✅ Security: CA certificates for HTTPS, timezone data
+- ✅ Optimized layer caching (dependencies before source)
+
+### Troubleshooting
+
+#### Container won't start
+```bash
+# Check logs
+docker logs athena-api
+
+# Check if port is already in use
+lsof -i :1323
+```
+
+#### Health check failing
+```bash
+# Test health endpoint manually
+curl http://localhost:1323/ping
+
+# Check container logs
+docker logs athena-api
+```
+
+#### Permission issues
+```bash
+# Ensure volumes have correct permissions
+chmod -R 755 ./data
+```
+
 ## Testing
 
 ### Run All Tests
@@ -742,7 +948,7 @@ Error response format:
 - [ ] Password reset functionality
 - [ ] Rate limiting per user/IP
 - [ ] API documentation (Swagger/OpenAPI)
-- [ ] Docker support with docker-compose
+- [x] Docker support with docker-compose
 - [ ] CI/CD pipeline (GitHub Actions)
 - [ ] Metrics and monitoring (Prometheus)
 - [ ] Graceful shutdown

@@ -1,0 +1,62 @@
+# Git files
+.git
+.gitignore
+
+# Build artifacts
+athena
+api-server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go cache and modules (will be downloaded in container)
+.gocache/
+.gomodcache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+
+# Environment files (should be set at runtime)
+.env
+.env.local
+.env.*.local
+
+# Test manual scripts
+test_jwt.sh
+test_manual.md
