@@ -7,6 +7,7 @@ import (
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tsongpon/athena/internal/database"
 	"github.com/tsongpon/athena/internal/handler"
 	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/repository"
@@ -23,7 +24,43 @@ func main() {
 
 	logger.Info("Starting Athena API server")
 
-	bookmarkRepo := repository.NewBookmarkInMemRepository()
+	// Determine storage type from environment variable
+	storageType := os.Getenv("STORAGE_TYPE")
+	if storageType == "" {
+		storageType = "memory" // Default to in-memory
+	}
+
+	var bookmarkRepo service.BookmarkRepository
+
+	if storageType == "postgres" {
+		// PostgreSQL configuration from environment variables
+		dbConfig := database.PostgresConfig{
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnv("DB_PORT", "5432"),
+			User:     getEnv("DB_USER", "postgres"),
+			Password: getEnv("DB_PASSWORD", ""),
+			DBName:   getEnv("DB_NAME", "athena"),
+			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+		}
+
+		db, err := database.NewPostgresConnection(dbConfig)
+		if err != nil {
+			logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
+		}
+		defer db.Close()
+
+		// Run migrations
+		if err := database.RunMigrations(db); err != nil {
+			logger.Fatal("Failed to run database migrations", zap.Error(err))
+		}
+
+		bookmarkRepo = repository.NewBookmarkPostgresRepository(db)
+		logger.Info("Using PostgreSQL storage for bookmarks")
+	} else {
+		bookmarkRepo = repository.NewBookmarkInMemRepository()
+		logger.Info("Using in-memory storage for bookmarks")
+	}
+
 	webRepo := repository.NewWebRepository()
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, webRepo)
 
@@ -75,4 +112,13 @@ func main() {
 	if err := e.Start(":1323"); err != nil {
 		logger.Fatal("Server failed to start", zap.Error(err))
 	}
+}
+
+// getEnv retrieves an environment variable or returns a default value
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }

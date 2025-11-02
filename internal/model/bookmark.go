@@ -9,6 +9,7 @@ type Bookmark struct {
 	Title      string
 	IsArchived bool
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // BookmarkQuery represents query parameters for listing bookmarks

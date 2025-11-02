@@ -17,7 +17,8 @@ Athena is a lightweight RESTful API service for managing bookmarks. It provides 
 - ✅ Password hashing with bcrypt
 - ✅ Structured logging with Uber's Zap (development and production modes)
 - ✅ Automatic website title fetching for bookmarks
-- ✅ In-memory storage with repository pattern (easy to extend to database)
+- ✅ Pluggable storage backends: In-memory and PostgreSQL
+- ✅ Database migrations with automatic schema creation
 - ✅ Clean architecture with separation of concerns (handler, service, repository layers)
 - ✅ Built-in logging, CORS, and recovery middleware
 - ✅ Docker support with multi-stage builds
@@ -28,6 +29,7 @@ Athena is a lightweight RESTful API service for managing bookmarks. It provides 
 - **Language**: Go 1.25.1
 - **Web Framework**: [Echo v4](https://echo.labstack.com/)
 - **Authentication**: JWT with [golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) & [echo-jwt/v4](https://github.com/labstack/echo-jwt)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) with [lib/pq](https://github.com/lib/pq) driver
 - **Logging**: [Uber Zap](https://github.com/uber-go/zap)
 - **Password Hashing**: bcrypt
 - **ID Generation**: [Google UUID](https://github.com/google/uuid)
@@ -93,6 +95,17 @@ go mod download
 ```bash
 # JWT secret (defaults to development secret)
 export JWT_SECRET="your-super-secret-key-change-this-in-production"
+
+# Storage configuration (defaults to in-memory)
+export STORAGE_TYPE="postgres"  # Options: memory (default), postgres
+
+# PostgreSQL configuration (only needed if STORAGE_TYPE=postgres)
+export DB_HOST="localhost"
+export DB_PORT="5432"
+export DB_USER="postgres"
+export DB_PASSWORD="your_password"
+export DB_NAME="athena"
+export DB_SSLMODE="disable"  # Use "require" in production
 
 # Logging configuration
 export APP_ENV="production"  # Use "production" for JSON logs, default is development
@@ -555,19 +568,26 @@ type JWTClaims struct {
 
 ## Docker
 
-The application includes Docker support for easy deployment and development.
+The application includes Docker support for easy deployment with PostgreSQL database.
 
-### Quick Start with Docker
+### Quick Start with Docker Compose
 
 ```bash
-# Using docker-compose (recommended)
+# Start both API and PostgreSQL
 docker-compose up -d
 
 # Check logs
-docker-compose logs -f athena
+docker-compose logs -f
 
-# Stop
+# Check specific service logs
+docker-compose logs -f athena
+docker-compose logs -f postgres
+
+# Stop all services
 docker-compose down
+
+# Stop and remove volumes (deletes database data)
+docker-compose down -v
 ```
 
 ### Docker Configuration
@@ -580,28 +600,48 @@ Set environment variables via `.env` file:
 # Copy example file
 cp .env.example .env
 
-# Edit .env and set your JWT_SECRET
+# Edit .env and configure your settings
 nano .env
 ```
 
-Or pass environment variables directly:
+**Important variables**:
+- `JWT_SECRET` - Change in production!
+- `DB_PASSWORD` - Database password
+- `STORAGE_TYPE` - Set to `postgres` (default)
+- `LOG_LEVEL` - Logging verbosity
+
+#### Docker Compose Services
+
+The `docker-compose.yml` includes:
+
+**PostgreSQL Service**:
+- Image: `postgres:16-alpine`
+- Port: 5432
+- Persistent storage with named volume
+- Health checks for reliable startup
+- Configurable via environment variables
+
+**Athena API Service**:
+- Built from Dockerfile
+- Port: 1323
+- Automatic database migrations on startup
+- Waits for PostgreSQL to be healthy
+- Health checks via `/ping` endpoint
+- Auto-restart unless stopped
+- JSON logging in production mode
+
+**Network**:
+- Custom bridge network for service communication
+- Services communicate via service names
+
+#### Alternative: In-Memory Storage
+
+For development without PostgreSQL:
 
 ```bash
-docker run -p 1323:1323 \
-  -e JWT_SECRET="your-strong-secret-key" \
-  athena:latest
+# Use in-memory configuration
+docker-compose -f docker-compose.memory.yml up -d
 ```
-
-#### Docker Compose
-
-The `docker-compose.yml` file includes:
-
-- **athena service**: The API server
-- **Health checks**: Automatic health monitoring
-- **Port mapping**: 1323:1323
-- **Auto-restart**: Unless manually stopped
-
-Future database integration is commented out and ready to enable.
 
 ### Building the Docker Image
 
@@ -644,24 +684,72 @@ docker run -d -p 1323:1323 \
 # View running containers
 docker ps
 
+# View all containers (including stopped)
+docker ps -a
+
 # View logs
-docker logs athena-api
-docker logs -f athena-api  # Follow logs
+docker-compose logs athena
+docker-compose logs postgres
+docker-compose logs -f  # Follow all logs
 
-# Stop container
-docker stop athena-api
+# Stop services
+docker-compose stop
 
-# Start container
-docker start athena-api
+# Start services
+docker-compose start
 
-# Restart container
-docker restart athena-api
+# Restart services
+docker-compose restart
 
-# Remove container
-docker rm athena-api
+# Remove containers
+docker-compose down
 
-# Remove image
-docker rmi athena:latest
+# Remove containers and volumes (deletes database)
+docker-compose down -v
+```
+
+### Database Management
+
+#### Access PostgreSQL
+
+```bash
+# Connect to PostgreSQL container
+docker exec -it athena-postgres psql -U athena_user -d athena
+
+# Run SQL query
+docker exec -it athena-postgres psql -U athena_user -d athena -c "SELECT COUNT(*) FROM bookmarks;"
+
+# Dump database
+docker exec athena-postgres pg_dump -U athena_user athena > backup.sql
+
+# Restore database
+docker exec -i athena-postgres psql -U athena_user athena < backup.sql
+```
+
+#### View Database Data
+
+```bash
+# List all bookmarks
+docker exec -it athena-postgres psql -U athena_user -d athena -c "SELECT id, title, url FROM bookmarks;"
+
+# Check table structure
+docker exec -it athena-postgres psql -U athena_user -d athena -c "\d bookmarks"
+```
+
+#### Database Volume Management
+
+```bash
+# View volumes
+docker volume ls
+
+# Inspect volume
+docker volume inspect athena_postgres_data
+
+# Backup volume
+docker run --rm -v athena_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz -C /data .
+
+# Restore volume
+docker run --rm -v athena_postgres_data:/data -v $(pwd):/backup alpine sh -c "cd /data && tar xzf /backup/postgres_backup.tar.gz"
 ```
 
 ### Health Check
@@ -946,6 +1034,38 @@ Error response format:
 }
 ```
 
+## PostgreSQL Storage
+
+Athena supports PostgreSQL as a persistent storage backend. See [docs/postgresql.md](docs/postgresql.md) for detailed setup instructions.
+
+### Quick Setup
+
+```bash
+# Create database
+createdb athena
+
+# Configure environment
+export STORAGE_TYPE=postgres
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_USER=postgres
+export DB_PASSWORD=your_password
+export DB_NAME=athena
+
+# Run server (migrations run automatically)
+go run ./cmd/api-server
+```
+
+### Features
+
+- ✅ Automatic database migrations
+- ✅ Connection pooling
+- ✅ Indexed queries for performance
+- ✅ Ordered results (newest first)
+- ✅ Transaction support
+
+For production setup, Docker Compose configuration, and troubleshooting, see the [PostgreSQL documentation](docs/postgresql.md).
+
 ## Logging
 
 Athena uses [Uber Zap](https://github.com/uber-go/zap) for structured, high-performance logging.
@@ -972,7 +1092,8 @@ For detailed logging documentation, see [docs/logging.md](docs/logging.md).
 
 ## Future Enhancements
 
-- [ ] Database persistence (PostgreSQL, MySQL, MongoDB)
+- [x] Database persistence (PostgreSQL)
+- [ ] Additional database support (MySQL, MongoDB)
 - [x] Bookmark title fetching from URL metadata
 - [ ] Full-text search across bookmarks
 - [ ] Tagging/categorization system
