@@ -6,6 +6,7 @@ type UserRepository interface {
 	CreateUser(user model.User) (model.User, error)
 	GetUserByID(id string) (model.User, error)
 	GetUserByEmail(email string) (model.User, error)
+	GetUserByEmailAndPassword(email, hashedPassword string) (model.User, error)
 }
 
 type BookmarkRepository interface {

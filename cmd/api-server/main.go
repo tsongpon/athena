@@ -31,6 +31,7 @@ func main() {
 	}
 
 	var bookmarkRepo service.BookmarkRepository
+	var userRepo service.UserRepository
 
 	if storageType == "postgres" {
 		// PostgreSQL configuration from environment variables
@@ -49,22 +50,17 @@ func main() {
 		}
 		defer db.Close()
 
-		// Run migrations
-		if err := database.RunMigrations(db); err != nil {
-			logger.Fatal("Failed to run database migrations", zap.Error(err))
-		}
-
 		bookmarkRepo = repository.NewBookmarkPostgresRepository(db)
-		logger.Info("Using PostgreSQL storage for bookmarks")
+		userRepo = repository.NewUserPostgresRepository(db)
+		logger.Info("Using PostgreSQL storage for bookmarks and users")
 	} else {
 		bookmarkRepo = repository.NewBookmarkInMemRepository()
-		logger.Info("Using in-memory storage for bookmarks")
+		userRepo = repository.NewUserInMemRepository()
+		logger.Info("Using in-memory storage for bookmarks and users")
 	}
 
 	webRepo := repository.NewWebRepository()
 	bookmarkService := service.NewBookmarkService(bookmarkRepo, webRepo)
-
-	userRepo := repository.NewUserInMemRepository()
 	userService := service.NewUserService(userRepo)
 
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
