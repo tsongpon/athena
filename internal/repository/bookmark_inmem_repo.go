@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ func (r *BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error)
 }
 
 // ListBookmarks retrieves all bookmarks based on the query parameters
+// Returns bookmarks ordered by created date descending (newest first)
 func (r *BookmarkInMemRepository) ListBookmarks(query model.BookmarkQuery) ([]model.Bookmark, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
@@ -68,6 +70,11 @@ func (r *BookmarkInMemRepository) ListBookmarks(query model.BookmarkQuery) ([]mo
 			userBookmarks = append(userBookmarks, bookmark)
 		}
 	}
+
+	// Sort by created date descending (newest first)
+	sort.Slice(userBookmarks, func(i, j int) bool {
+		return userBookmarks[i].CreatedAt.After(userBookmarks[j].CreatedAt)
+	})
 
 	return userBookmarks, nil
 }

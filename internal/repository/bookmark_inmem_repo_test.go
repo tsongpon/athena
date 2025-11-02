@@ -668,6 +668,81 @@ func TestBookmarkInMemRepository_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+func TestBookmarkInMemRepository_ListBookmarks_OrderedByCreatedDateDesc(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create bookmarks with specific timestamps
+	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	bookmarks := []model.Bookmark{
+		{
+			UserID:    "user1",
+			URL:       "https://example1.com",
+			Title:     "First (oldest)",
+			CreatedAt: baseTime,
+		},
+		{
+			UserID:    "user1",
+			URL:       "https://example2.com",
+			Title:     "Second",
+			CreatedAt: baseTime.Add(1 * time.Hour),
+		},
+		{
+			UserID:    "user1",
+			URL:       "https://example3.com",
+			Title:     "Third (newest)",
+			CreatedAt: baseTime.Add(2 * time.Hour),
+		},
+	}
+
+	// Add bookmarks in random order
+	_, err := repo.CreateBookmark(bookmarks[1]) // Second
+	if err != nil {
+		t.Fatalf("Failed to create bookmark: %v", err)
+	}
+
+	_, err = repo.CreateBookmark(bookmarks[0]) // First (oldest)
+	if err != nil {
+		t.Fatalf("Failed to create bookmark: %v", err)
+	}
+
+	_, err = repo.CreateBookmark(bookmarks[2]) // Third (newest)
+	if err != nil {
+		t.Fatalf("Failed to create bookmark: %v", err)
+	}
+
+	// List bookmarks for user1
+	result, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
+	if err != nil {
+		t.Errorf("ListBookmarks() unexpected error = %v", err)
+		return
+	}
+
+	if len(result) != 3 {
+		t.Errorf("ListBookmarks() count = %v, want 3", len(result))
+		return
+	}
+
+	// Verify they are ordered by created date descending (newest first)
+	if result[0].Title != "Third (newest)" {
+		t.Errorf("First bookmark should be 'Third (newest)', got '%s'", result[0].Title)
+	}
+	if result[1].Title != "Second" {
+		t.Errorf("Second bookmark should be 'Second', got '%s'", result[1].Title)
+	}
+	if result[2].Title != "First (oldest)" {
+		t.Errorf("Third bookmark should be 'First (oldest)', got '%s'", result[2].Title)
+	}
+
+	// Verify timestamps are in descending order
+	for i := 0; i < len(result)-1; i++ {
+		if result[i].CreatedAt.Before(result[i+1].CreatedAt) {
+			t.Errorf("Bookmarks not in descending order: result[%d].CreatedAt (%v) is before result[%d].CreatedAt (%v)",
+				i, result[i].CreatedAt, i+1, result[i+1].CreatedAt)
+		}
+	}
+}
+
 func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 	repo := NewBookmarkInMemRepository()
 
