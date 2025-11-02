@@ -127,8 +127,8 @@ cd ../..
     ```json
     {
       "namename": "John Doe",
-      "email"John Doe",
-      "email": "john@ "john@example.com",
+      "email: "John Doe",
+      "email": "john@example.com",
       "passwordpassword": "securepassword123securepassword123"
     }
     ```
@@ -239,7 +239,7 @@ Authorization: Bearer <your-jwt-token>
       "url": "https://example.com",
       "title": "",
       "user_id": "user-id-from-jwtid-from-jwt",
-      "is_archivedis_archived": falsefalse
+      "is_archived": false
     }
     ```
   - Note: `user_id` is automatically extracted from the JWT token
@@ -572,7 +572,7 @@ go test -v -run TestBookmarkHandler_GetBookmark_Forbidden ./internal/handler/
 ### Test Coverage Breakdown
 - **Handler Layer**: 95.9% (65 tests total)
   - `auth.go`: Covered by 14 tests
-  - `bookmark.go`: Covered by 38 tests  
+  - `bookmark.go`: Covered by 38 tests
   - `jwt_helper.go`: Covered by handler tests
   - Other tests: 13 tests (marshaling, benchmarks, helpers)
 - **Repository Layer**: 100.0%
