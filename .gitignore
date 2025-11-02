@@ -78,3 +78,6 @@ __debug_bin*
 
 # Air live reload
 tmp/
+
+.gocache
+.gomodcache

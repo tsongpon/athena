@@ -1,8 +1,0 @@
-./auth.go
-./bookmark.go
-./bookmark_service.go
-./user.go
-./user_service.go
-./auth_test.go
-./bookmark_test.go
-./user_test.go
