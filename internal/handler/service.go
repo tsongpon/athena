@@ -12,5 +12,6 @@ type BookmarkService interface {
 	GetBookmark(id string) (model.Bookmark, error)
 	DeleteBookmark(id string) error
 	GetAllBookmarks(userID string, archived bool) ([]model.Bookmark, error)
+	GetBookmarksWithPagination(userID string, archived bool, page, pageSize int) (model.BookmarkListResponse, error)
 	ArchiveBookmark(id string) (model.Bookmark, error)
 }

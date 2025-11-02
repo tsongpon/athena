@@ -60,6 +60,7 @@ func (r *BookmarkInMemRepository) GetBookmark(id string) (model.Bookmark, error)
 
 // ListBookmarks retrieves all bookmarks based on the query parameters
 // Returns bookmarks ordered by created date descending (newest first)
+// Supports pagination when Page and PageSize are greater than 0
 func (r *BookmarkInMemRepository) ListBookmarks(query model.BookmarkQuery) ([]model.Bookmark, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
@@ -77,7 +78,38 @@ func (r *BookmarkInMemRepository) ListBookmarks(query model.BookmarkQuery) ([]mo
 		return userBookmarks[i].CreatedAt.After(userBookmarks[j].CreatedAt)
 	})
 
+	// Apply pagination if specified
+	if query.Page > 0 && query.PageSize > 0 {
+		start := (query.Page - 1) * query.PageSize
+		end := start + query.PageSize
+
+		// Handle out of bounds
+		if start >= len(userBookmarks) {
+			return []model.Bookmark{}, nil
+		}
+		if end > len(userBookmarks) {
+			end = len(userBookmarks)
+		}
+
+		return userBookmarks[start:end], nil
+	}
+
 	return userBookmarks, nil
+}
+
+// CountBookmarks returns the total count of bookmarks matching the query
+func (r *BookmarkInMemRepository) CountBookmarks(query model.BookmarkQuery) (int, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	count := 0
+	for _, bookmark := range r.bookmarks {
+		if bookmark.UserID == query.UserID && bookmark.IsArchived == query.Archived {
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 // UpdateBookmark updates an existing bookmark in the repository

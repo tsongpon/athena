@@ -102,19 +102,41 @@ func (r *BookmarkPostgresRepository) GetBookmark(id string) (model.Bookmark, err
 
 // ListBookmarks retrieves all bookmarks based on the query parameters from PostgreSQL
 // Returns bookmarks ordered by created date descending (newest first)
+// Supports pagination when Page and PageSize are greater than 0
 func (r *BookmarkPostgresRepository) ListBookmarks(query model.BookmarkQuery) ([]model.Bookmark, error) {
-	sqlQuery := `
-		SELECT id, user_id, url, title, is_archived, created_at, updated_at
-		FROM bookmarks
-		WHERE user_id = $1 AND is_archived = $2
-		ORDER BY created_at DESC
-	`
+	// Build the SQL query with optional pagination
+	var sqlQuery string
+	var args []interface{}
 
-	rows, err := r.db.Query(sqlQuery, query.UserID, query.Archived)
+	if query.Page > 0 && query.PageSize > 0 {
+		// With pagination
+		offset := (query.Page - 1) * query.PageSize
+		sqlQuery = `
+			SELECT id, user_id, url, title, is_archived, created_at, updated_at
+			FROM bookmarks
+			WHERE user_id = $1 AND is_archived = $2
+			ORDER BY created_at DESC
+			LIMIT $3 OFFSET $4
+		`
+		args = []interface{}{query.UserID, query.Archived, query.PageSize, offset}
+	} else {
+		// Without pagination
+		sqlQuery = `
+			SELECT id, user_id, url, title, is_archived, created_at, updated_at
+			FROM bookmarks
+			WHERE user_id = $1 AND is_archived = $2
+			ORDER BY created_at DESC
+		`
+		args = []interface{}{query.UserID, query.Archived}
+	}
+
+	rows, err := r.db.Query(sqlQuery, args...)
 	if err != nil {
 		logger.Error("Failed to list bookmarks from database",
 			zap.String("user_id", query.UserID),
 			zap.Bool("archived", query.Archived),
+			zap.Int("page", query.Page),
+			zap.Int("page_size", query.PageSize),
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to list bookmarks: %w", err)
 	}
@@ -148,9 +170,36 @@ func (r *BookmarkPostgresRepository) ListBookmarks(query model.BookmarkQuery) ([
 
 	logger.Debug("Listed bookmarks from database",
 		zap.String("user_id", query.UserID),
-		zap.Int("count", len(bookmarks)))
+		zap.Int("count", len(bookmarks)),
+		zap.Int("page", query.Page),
+		zap.Int("page_size", query.PageSize))
 
 	return bookmarks, nil
+}
+
+// CountBookmarks returns the total count of bookmarks matching the query
+func (r *BookmarkPostgresRepository) CountBookmarks(query model.BookmarkQuery) (int, error) {
+	sqlQuery := `
+		SELECT COUNT(*)
+		FROM bookmarks
+		WHERE user_id = $1 AND is_archived = $2
+	`
+
+	var count int
+	err := r.db.QueryRow(sqlQuery, query.UserID, query.Archived).Scan(&count)
+	if err != nil {
+		logger.Error("Failed to count bookmarks from database",
+			zap.String("user_id", query.UserID),
+			zap.Bool("archived", query.Archived),
+			zap.Error(err))
+		return 0, fmt.Errorf("failed to count bookmarks: %w", err)
+	}
+
+	logger.Debug("Counted bookmarks from database",
+		zap.String("user_id", query.UserID),
+		zap.Int("count", count))
+
+	return count, nil
 }
 
 // UpdateBookmark updates an existing bookmark in PostgreSQL

@@ -13,6 +13,7 @@ type MockBookmarkRepository struct {
 	createBookmarkFunc func(bookmark model.Bookmark) (model.Bookmark, error)
 	getBookmarkFunc    func(id string) (model.Bookmark, error)
 	listBookmarksFunc  func(userID string, archived bool) ([]model.Bookmark, error)
+	countBookmarksFunc func(query model.BookmarkQuery) (int, error)
 	updateBookmarkFunc func(bookmark model.Bookmark) (model.Bookmark, error)
 	deleteBookmarkFunc func(id string) error
 }
@@ -41,6 +42,13 @@ func (m *MockBookmarkRepository) ListBookmarks(query model.BookmarkQuery) ([]mod
 		return m.listBookmarksFunc(query.UserID, query.Archived)
 	}
 	return []model.Bookmark{}, nil
+}
+
+func (m *MockBookmarkRepository) CountBookmarks(query model.BookmarkQuery) (int, error) {
+	if m.countBookmarksFunc != nil {
+		return m.countBookmarksFunc(query)
+	}
+	return 0, nil
 }
 
 func (m *MockBookmarkRepository) UpdateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {

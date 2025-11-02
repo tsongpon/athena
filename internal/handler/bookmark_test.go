@@ -41,6 +41,11 @@ func (m *MockBookmarkService) GetAllBookmarks(userID string, archived bool) ([]m
 	return args.Get(0).([]model.Bookmark), args.Error(1)
 }
 
+func (m *MockBookmarkService) GetBookmarksWithPagination(userID string, archived bool, page, pageSize int) (model.BookmarkListResponse, error) {
+	args := m.Called(userID, archived, page, pageSize)
+	return args.Get(0).(model.BookmarkListResponse), args.Error(1)
+}
+
 func (m *MockBookmarkService) ArchiveBookmark(id string) (model.Bookmark, error) {
 	args := m.Called(id)
 	return args.Get(0).(model.Bookmark), args.Error(1)

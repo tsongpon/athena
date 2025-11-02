@@ -115,6 +115,59 @@ func (h *BookmarkHandler) GetBookmarks(c echo.Context) error {
 	if err != nil {
 		archived = false
 	}
+
+	// Check for pagination parameters
+	pageParam := c.QueryParam("page")
+	pageSizeParam := c.QueryParam("page_size")
+
+	// If pagination parameters are provided, use paginated endpoint
+	if pageParam != "" || pageSizeParam != "" {
+		page, err := strconv.Atoi(pageParam)
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		pageSize, err := strconv.Atoi(pageSizeParam)
+		if err != nil || pageSize < 1 {
+			pageSize = 20 // Default page size
+		}
+
+		response, err := h.bookmarkService.GetBookmarksWithPagination(userID, archived, page, pageSize)
+		if err != nil {
+			logger.Error("Failed to get paginated bookmarks",
+				zap.String("user_id", userID),
+				zap.Int("page", page),
+				zap.Int("page_size", pageSize),
+				zap.Error(err))
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+
+		// Convert bookmarks to transport format
+		ts := make([]transport.BookmarkTransport, len(response.Bookmarks))
+		for i, b := range response.Bookmarks {
+			ts[i] = transport.BookmarkTransport{
+				ID:         b.ID,
+				URL:        b.URL,
+				Title:      b.Title,
+				UserID:     b.UserID,
+				CreatedAt:  b.CreatedAt,
+				IsArchived: b.IsArchived,
+			}
+		}
+
+		// Return paginated response
+		paginatedResponse := map[string]interface{}{
+			"bookmarks":   ts,
+			"total_count": response.TotalCount,
+			"page":        response.Page,
+			"page_size":   response.PageSize,
+			"total_pages": response.TotalPages,
+		}
+
+		return c.JSON(http.StatusOK, paginatedResponse)
+	}
+
+	// No pagination - return all bookmarks
 	bookmarks, err := h.bookmarkService.GetAllBookmarks(userID, archived)
 	if err != nil {
 		return err

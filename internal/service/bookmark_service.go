@@ -85,6 +85,55 @@ func (s *BookmarkService) GetAllBookmarks(userID string, archived bool) ([]model
 	return bookmarks, nil
 }
 
+// GetBookmarksWithPagination retrieves bookmarks with pagination support
+func (s *BookmarkService) GetBookmarksWithPagination(userID string, archived bool, page, pageSize int) (model.BookmarkListResponse, error) {
+	// Validate pagination parameters
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20 // Default page size
+	}
+	if pageSize > 100 {
+		pageSize = 100 // Maximum page size
+	}
+
+	query := model.BookmarkQuery{
+		UserID:   userID,
+		Archived: archived,
+		Page:     page,
+		PageSize: pageSize,
+	}
+
+	// Get paginated bookmarks
+	bookmarks, err := s.bookmarkRepository.ListBookmarks(query)
+	if err != nil {
+		return model.BookmarkListResponse{}, fmt.Errorf("failed to get bookmarks: %w", err)
+	}
+
+	// Get total count
+	totalCount, err := s.bookmarkRepository.CountBookmarks(query)
+	if err != nil {
+		return model.BookmarkListResponse{}, fmt.Errorf("failed to count bookmarks: %w", err)
+	}
+
+	// Calculate total pages
+	totalPages := (totalCount + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	response := model.BookmarkListResponse{
+		Bookmarks:  bookmarks,
+		TotalCount: totalCount,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}
+
+	return response, nil
+}
+
 func (s *BookmarkService) DeleteBookmark(id string) error {
 	if id == "" {
 		return fmt.Errorf("id is required")
