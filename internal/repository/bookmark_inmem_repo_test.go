@@ -795,3 +795,274 @@ func TestBookmarkInMemRepository_EdgeCases(t *testing.T) {
 		t.Errorf("ListBookmarks() should return 1 bookmark with special characters, got %d", len(bookmarks))
 	}
 }
+
+// TestBookmarkInMemRepository_CountBookmarks tests counting bookmarks
+func TestBookmarkInMemRepository_CountBookmarks(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create bookmarks for user1
+	for i := 0; i < 5; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID: "user1",
+			URL:    fmt.Sprintf("https://example%d.com", i),
+			Title:  fmt.Sprintf("Example %d", i),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create bookmark: %v", err)
+		}
+	}
+
+	// Create bookmarks for user2
+	for i := 0; i < 3; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID: "user2",
+			URL:    fmt.Sprintf("https://example%d.com", i+10),
+			Title:  fmt.Sprintf("Example %d", i+10),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create bookmark: %v", err)
+		}
+	}
+
+	// Count bookmarks for user1
+	count, err := repo.CountBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
+	if err != nil {
+		t.Errorf("CountBookmarks() unexpected error = %v", err)
+		return
+	}
+	if count != 5 {
+		t.Errorf("CountBookmarks() for user1 = %d, want 5", count)
+	}
+
+	// Count bookmarks for user2
+	count, err = repo.CountBookmarks(model.BookmarkQuery{UserID: "user2", Archived: false})
+	if err != nil {
+		t.Errorf("CountBookmarks() unexpected error = %v", err)
+		return
+	}
+	if count != 3 {
+		t.Errorf("CountBookmarks() for user2 = %d, want 3", count)
+	}
+
+	// Count bookmarks for non-existent user
+	count, err = repo.CountBookmarks(model.BookmarkQuery{UserID: "nonexistent", Archived: false})
+	if err != nil {
+		t.Errorf("CountBookmarks() unexpected error = %v", err)
+		return
+	}
+	if count != 0 {
+		t.Errorf("CountBookmarks() for non-existent user = %d, want 0", count)
+	}
+}
+
+// TestBookmarkInMemRepository_CountBookmarks_WithArchived tests counting with archived filter
+func TestBookmarkInMemRepository_CountBookmarks_WithArchived(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create active bookmarks
+	for i := 0; i < 3; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID:     "user1",
+			URL:        fmt.Sprintf("https://active%d.com", i),
+			Title:      fmt.Sprintf("Active %d", i),
+			IsArchived: false,
+		})
+		if err != nil {
+			t.Fatalf("Failed to create active bookmark: %v", err)
+		}
+	}
+
+	// Create archived bookmarks
+	for i := 0; i < 2; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID:     "user1",
+			URL:        fmt.Sprintf("https://archived%d.com", i),
+			Title:      fmt.Sprintf("Archived %d", i),
+			IsArchived: true,
+		})
+		if err != nil {
+			t.Fatalf("Failed to create archived bookmark: %v", err)
+		}
+	}
+
+	// Count active bookmarks
+	count, err := repo.CountBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
+	if err != nil {
+		t.Errorf("CountBookmarks() for active bookmarks unexpected error = %v", err)
+		return
+	}
+	if count != 3 {
+		t.Errorf("CountBookmarks() for active bookmarks = %d, want 3", count)
+	}
+
+	// Count archived bookmarks
+	count, err = repo.CountBookmarks(model.BookmarkQuery{UserID: "user1", Archived: true})
+	if err != nil {
+		t.Errorf("CountBookmarks() for archived bookmarks unexpected error = %v", err)
+		return
+	}
+	if count != 2 {
+		t.Errorf("CountBookmarks() for archived bookmarks = %d, want 2", count)
+	}
+}
+
+// TestBookmarkInMemRepository_CountBookmarks_Empty tests counting in empty repository
+func TestBookmarkInMemRepository_CountBookmarks_Empty(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	count, err := repo.CountBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
+	if err != nil {
+		t.Errorf("CountBookmarks() on empty repository unexpected error = %v", err)
+		return
+	}
+	if count != 0 {
+		t.Errorf("CountBookmarks() on empty repository = %d, want 0", count)
+	}
+}
+
+// TestBookmarkInMemRepository_ListBookmarks_WithPagination tests pagination
+func TestBookmarkInMemRepository_ListBookmarks_WithPagination(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create 10 bookmarks
+	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 10; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID:    "user1",
+			URL:       fmt.Sprintf("https://example%d.com", i),
+			Title:     fmt.Sprintf("Example %d", i),
+			CreatedAt: baseTime.Add(time.Duration(i) * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create bookmark: %v", err)
+		}
+	}
+
+	// Test first page
+	result, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false, Page: 1, PageSize: 3})
+	if err != nil {
+		t.Errorf("ListBookmarks() page 1 unexpected error = %v", err)
+		return
+	}
+	if len(result) != 3 {
+		t.Errorf("ListBookmarks() page 1 count = %d, want 3", len(result))
+	}
+
+	// Test second page
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false, Page: 2, PageSize: 3})
+	if err != nil {
+		t.Errorf("ListBookmarks() page 2 unexpected error = %v", err)
+		return
+	}
+	if len(result) != 3 {
+		t.Errorf("ListBookmarks() page 2 count = %d, want 3", len(result))
+	}
+
+	// Test last page (partial)
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false, Page: 4, PageSize: 3})
+	if err != nil {
+		t.Errorf("ListBookmarks() page 4 unexpected error = %v", err)
+		return
+	}
+	if len(result) != 1 {
+		t.Errorf("ListBookmarks() page 4 count = %d, want 1", len(result))
+	}
+
+	// Test page beyond available data
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false, Page: 10, PageSize: 3})
+	if err != nil {
+		t.Errorf("ListBookmarks() page 10 unexpected error = %v", err)
+		return
+	}
+	if len(result) != 0 {
+		t.Errorf("ListBookmarks() page beyond data count = %d, want 0", len(result))
+	}
+}
+
+// TestBookmarkInMemRepository_ListBookmarks_WithoutPagination tests listing without pagination
+func TestBookmarkInMemRepository_ListBookmarks_WithoutPagination(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create 5 bookmarks
+	for i := 0; i < 5; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID: "user1",
+			URL:    fmt.Sprintf("https://example%d.com", i),
+			Title:  fmt.Sprintf("Example %d", i),
+		})
+		if err != nil {
+			t.Fatalf("Failed to create bookmark: %v", err)
+		}
+	}
+
+	// Test without pagination (Page=0 or PageSize=0)
+	result, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false, Page: 0, PageSize: 0})
+	if err != nil {
+		t.Errorf("ListBookmarks() without pagination unexpected error = %v", err)
+		return
+	}
+	if len(result) != 5 {
+		t.Errorf("ListBookmarks() without pagination count = %d, want 5", len(result))
+	}
+}
+
+// TestBookmarkInMemRepository_ListBookmarks_WithArchivedFilter tests archived filtering
+func TestBookmarkInMemRepository_ListBookmarks_WithArchivedFilter(t *testing.T) {
+	repo := NewBookmarkInMemRepository()
+
+	// Create active bookmarks
+	for i := 0; i < 3; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID:     "user1",
+			URL:        fmt.Sprintf("https://active%d.com", i),
+			Title:      fmt.Sprintf("Active %d", i),
+			IsArchived: false,
+		})
+		if err != nil {
+			t.Fatalf("Failed to create active bookmark: %v", err)
+		}
+	}
+
+	// Create archived bookmarks
+	for i := 0; i < 2; i++ {
+		_, err := repo.CreateBookmark(model.Bookmark{
+			UserID:     "user1",
+			URL:        fmt.Sprintf("https://archived%d.com", i),
+			Title:      fmt.Sprintf("Archived %d", i),
+			IsArchived: true,
+		})
+		if err != nil {
+			t.Fatalf("Failed to create archived bookmark: %v", err)
+		}
+	}
+
+	// List active bookmarks
+	result, err := repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: false})
+	if err != nil {
+		t.Errorf("ListBookmarks() for active unexpected error = %v", err)
+		return
+	}
+	if len(result) != 3 {
+		t.Errorf("ListBookmarks() for active count = %d, want 3", len(result))
+	}
+	for _, b := range result {
+		if b.IsArchived {
+			t.Error("ListBookmarks() for active returned archived bookmark")
+		}
+	}
+
+	// List archived bookmarks
+	result, err = repo.ListBookmarks(model.BookmarkQuery{UserID: "user1", Archived: true})
+	if err != nil {
+		t.Errorf("ListBookmarks() for archived unexpected error = %v", err)
+		return
+	}
+	if len(result) != 2 {
+		t.Errorf("ListBookmarks() for archived count = %d, want 2", len(result))
+	}
+	for _, b := range result {
+		if !b.IsArchived {
+			t.Error("ListBookmarks() for archived returned active bookmark")
+		}
+	}
+}

@@ -333,6 +333,12 @@ func TestExtractTitle(t *testing.T) {
 			wantTitle: "First Title",
 			wantErr:   false,
 		},
+		{
+			name:        "Title with only whitespace becomes empty and errors",
+			html:        `<!DOCTYPE html><html><head><title>   </title></head><body></body></html>`,
+			wantErr:     true,
+			errContains: "no title found",
+		},
 	}
 
 	for _, tt := range tests {

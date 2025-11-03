@@ -819,3 +819,293 @@ func TestNewBookmarkService(t *testing.T) {
 		t.Error("NewBookmarkService() service should work correctly")
 	}
 }
+
+// TestBookmarkService_GetBookmarksWithPagination tests successful paginated retrieval
+func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
+	expectedBookmarks := []model.Bookmark{
+		{ID: "bookmark-1", UserID: "user-1", URL: "https://example1.com", Title: "Example 1"},
+		{ID: "bookmark-2", UserID: "user-1", URL: "https://example2.com", Title: "Example 2"},
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return expectedBookmarks, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			return 10, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
+
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+
+	if len(result.Bookmarks) != 2 {
+		t.Errorf("GetBookmarksWithPagination() returned %d bookmarks, want 2", len(result.Bookmarks))
+	}
+	if result.TotalCount != 10 {
+		t.Errorf("GetBookmarksWithPagination() TotalCount = %d, want 10", result.TotalCount)
+	}
+	if result.Page != 1 {
+		t.Errorf("GetBookmarksWithPagination() Page = %d, want 1", result.Page)
+	}
+	if result.PageSize != 20 {
+		t.Errorf("GetBookmarksWithPagination() PageSize = %d, want 20", result.PageSize)
+	}
+	if result.TotalPages != 1 {
+		t.Errorf("GetBookmarksWithPagination() TotalPages = %d, want 1", result.TotalPages)
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_PageValidation tests page parameter validation
+func TestBookmarkService_GetBookmarksWithPagination_PageValidation(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return []model.Bookmark{}, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			return 0, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+
+	// Test with page < 1 (should default to 1)
+	result, err := service.GetBookmarksWithPagination("user-1", false, 0, 20)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+	if result.Page != 1 {
+		t.Errorf("GetBookmarksWithPagination() with page=0 should default to 1, got %d", result.Page)
+	}
+
+	// Test with negative page (should default to 1)
+	result, err = service.GetBookmarksWithPagination("user-1", false, -5, 20)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+	if result.Page != 1 {
+		t.Errorf("GetBookmarksWithPagination() with page=-5 should default to 1, got %d", result.Page)
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_PageSizeValidation tests pageSize parameter validation
+func TestBookmarkService_GetBookmarksWithPagination_PageSizeValidation(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return []model.Bookmark{}, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			return 0, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+
+	// Test with pageSize < 1 (should default to 20)
+	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 0)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+	if result.PageSize != 20 {
+		t.Errorf("GetBookmarksWithPagination() with pageSize=0 should default to 20, got %d", result.PageSize)
+	}
+
+	// Test with negative pageSize (should default to 20)
+	result, err = service.GetBookmarksWithPagination("user-1", false, 1, -10)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+	if result.PageSize != 20 {
+		t.Errorf("GetBookmarksWithPagination() with pageSize=-10 should default to 20, got %d", result.PageSize)
+	}
+
+	// Test with pageSize > 100 (should cap at 100)
+	result, err = service.GetBookmarksWithPagination("user-1", false, 1, 200)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+		return
+	}
+	if result.PageSize != 100 {
+		t.Errorf("GetBookmarksWithPagination() with pageSize=200 should cap at 100, got %d", result.PageSize)
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_TotalPagesCalculation tests total pages calculation
+func TestBookmarkService_GetBookmarksWithPagination_TotalPagesCalculation(t *testing.T) {
+	testCases := []struct {
+		name       string
+		totalCount int
+		pageSize   int
+		wantPages  int
+	}{
+		{"Exact multiple", 100, 20, 5},
+		{"Not exact multiple", 95, 20, 5},
+		{"Less than page size", 15, 20, 1},
+		{"Zero count", 0, 20, 1},
+		{"One item", 1, 20, 1},
+		{"Edge case 21 items", 21, 20, 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockRepo := &MockBookmarkRepository{
+				listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+					return []model.Bookmark{}, nil
+				},
+				countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+					return tc.totalCount, nil
+				},
+			}
+
+			mockWebRepo := &MockWebRepository{}
+			service := NewBookmarkService(mockRepo, mockWebRepo)
+			result, err := service.GetBookmarksWithPagination("user-1", false, 1, tc.pageSize)
+
+			if err != nil {
+				t.Errorf("GetBookmarksWithPagination() unexpected error = %v", err)
+				return
+			}
+
+			if result.TotalPages != tc.wantPages {
+				t.Errorf("GetBookmarksWithPagination() TotalPages = %d, want %d", result.TotalPages, tc.wantPages)
+			}
+		})
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_EmptyResult tests handling empty result
+func TestBookmarkService_GetBookmarksWithPagination_EmptyResult(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return []model.Bookmark{}, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			return 0, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
+
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() with empty result unexpected error = %v", err)
+		return
+	}
+
+	if len(result.Bookmarks) != 0 {
+		t.Errorf("GetBookmarksWithPagination() returned %d bookmarks, want 0", len(result.Bookmarks))
+	}
+	if result.TotalCount != 0 {
+		t.Errorf("GetBookmarksWithPagination() TotalCount = %d, want 0", result.TotalCount)
+	}
+	if result.TotalPages != 1 {
+		t.Errorf("GetBookmarksWithPagination() TotalPages = %d, want 1", result.TotalPages)
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_ListError tests error handling when listing fails
+func TestBookmarkService_GetBookmarksWithPagination_ListError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return nil, fmt.Errorf("database connection failed")
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	_, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
+
+	if err == nil {
+		t.Error("GetBookmarksWithPagination() should return error when list fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to get bookmarks"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("GetBookmarksWithPagination() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_CountError tests error handling when count fails
+func TestBookmarkService_GetBookmarksWithPagination_CountError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			return []model.Bookmark{}, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			return 0, fmt.Errorf("database count failed")
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	_, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
+
+	if err == nil {
+		t.Error("GetBookmarksWithPagination() should return error when count fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to count bookmarks"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("GetBookmarksWithPagination() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_GetBookmarksWithPagination_ArchivedFilter tests archived filtering
+func TestBookmarkService_GetBookmarksWithPagination_ArchivedFilter(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{
+		listBookmarksFunc: func(userID string, archived bool) ([]model.Bookmark, error) {
+			if archived {
+				return []model.Bookmark{
+					{ID: "archived-1", IsArchived: true},
+				}, nil
+			}
+			return []model.Bookmark{
+				{ID: "active-1", IsArchived: false},
+			}, nil
+		},
+		countBookmarksFunc: func(query model.BookmarkQuery) (int, error) {
+			if query.Archived {
+				return 1, nil
+			}
+			return 1, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+
+	// Test with archived = false
+	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() with archived=false unexpected error = %v", err)
+		return
+	}
+	if len(result.Bookmarks) != 1 || result.Bookmarks[0].ID != "active-1" {
+		t.Error("GetBookmarksWithPagination() with archived=false should return active bookmarks")
+	}
+
+	// Test with archived = true
+	result, err = service.GetBookmarksWithPagination("user-1", true, 1, 20)
+	if err != nil {
+		t.Errorf("GetBookmarksWithPagination() with archived=true unexpected error = %v", err)
+		return
+	}
+	if len(result.Bookmarks) != 1 || result.Bookmarks[0].ID != "archived-1" {
+		t.Error("GetBookmarksWithPagination() with archived=true should return archived bookmarks")
+	}
+}
