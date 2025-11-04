@@ -104,8 +104,12 @@ func main() {
 	e.POST("/bookmarks/:id/archive", bookmarkHandler.ArchiveBookmark, echojwt.WithConfig(jwtConfig))
 
 	// Start server
-	logger.Info("Server starting on port 1323")
-	if err := e.Start(":1323"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "1323"
+	}
+	logger.Info("Server starting on port", zap.String("port", port))
+	if err := e.Start(":" + port); err != nil {
 		logger.Fatal("Server failed to start", zap.Error(err))
 	}
 }
