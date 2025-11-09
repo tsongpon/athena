@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
 
+	"cloud.google.com/go/firestore"
 	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
@@ -33,7 +35,8 @@ func main() {
 	var bookmarkRepo service.BookmarkRepository
 	var userRepo service.UserRepository
 
-	if storageType == "postgres" {
+	switch storageType {
+	case "postgres":
 		// PostgreSQL configuration from environment variables
 		dbConfig := database.PostgresConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -53,7 +56,27 @@ func main() {
 		bookmarkRepo = repository.NewBookmarkPostgresRepository(db)
 		userRepo = repository.NewUserPostgresRepository(db)
 		logger.Info("Using PostgreSQL storage for bookmarks and users")
-	} else {
+
+	case "firestore":
+		// Firestore configuration from environment variables
+		ctx := context.Background()
+		projectID := os.Getenv("GCP_PROJECT_ID")
+		databaseID := os.Getenv("GCP_FIRESTORE_DATABASE_ID")
+		if projectID == "" {
+			logger.Fatal("GCP_PROJECT_ID environment variable is required for Firestore")
+		}
+
+		client, err := firestore.NewClientWithDatabase(ctx, projectID, databaseID)
+		if err != nil {
+			logger.Fatal("Failed to create Firestore client", zap.Error(err))
+		}
+		defer client.Close()
+
+		bookmarkRepo = repository.NewBookmarkFirestoreRepository(ctx, client)
+		userRepo = repository.NewUserFirestoreRepository(ctx, client)
+		logger.Info("Using Firestore storage for bookmarks and users", zap.String("project_id", projectID))
+
+	default:
 		bookmarkRepo = repository.NewBookmarkInMemRepository()
 		userRepo = repository.NewUserInMemRepository()
 		logger.Info("Using in-memory storage for bookmarks and users")
