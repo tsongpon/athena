@@ -119,7 +119,7 @@ jobs:
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy athena \
-            --image=${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_ARTIFACT_REGISTRY_REPO }}/athena:${{ github.sha }} \
+            --image=${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_ARTIFACT_REGISTRY_REPO }}/athena:latest \
             --platform=managed \
             --region=${{ secrets.GCP_REGION }} \
             --allow-unauthenticated \
