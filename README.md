@@ -1090,6 +1090,126 @@ Athena uses [Uber Zap](https://github.com/uber-go/zap) for structured, high-perf
 
 For detailed logging documentation, see [docs/logging.md](docs/logging.md).
 
+## CI/CD Pipeline
+
+Athena uses GitHub Actions for continuous integration and deployment. The workflow automatically tests, builds, and deploys your application to Google Cloud Run.
+
+### Workflow Overview
+
+The CI/CD pipeline consists of three jobs:
+
+1. **Test** - Runs on all pushes and pull requests
+   - Runs unit tests with race detection
+   - Generates code coverage reports
+   - Uploads coverage to Codecov
+   - Enforces 80% minimum coverage threshold
+
+2. **Build** - Runs only on pushes to main/master branch
+   - Builds Docker image
+   - Pushes to GCP Artifact Registry
+   - Tags images with branch name, SHA, and `latest`
+
+3. **Deploy** - Runs only on pushes to main/master branch
+   - Deploys to Google Cloud Run
+   - Configures auto-scaling and environment variables
+   - Outputs the deployed service URL
+
+### Required GitHub Secrets
+
+Configure these secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):
+
+- **`GCP_SA_KEY`** - GCP Service Account JSON key with the following permissions:
+  - `roles/artifactregistry.writer` - Push Docker images
+  - `roles/run.admin` - Deploy to Cloud Run
+  - `roles/iam.serviceAccountUser` - Act as service account
+  
+- **`GCP_PROJECT_ID`** - Your GCP project ID (e.g., `my-project-123`)
+
+- **`GCP_REGION`** - GCP region for deployment (e.g., `us-central1`, `asia-southeast1`)
+
+- **`GCP_ARTIFACT_REGISTRY_REPO`** - Artifact Registry repository name (e.g., `athena-docker`)
+
+- **`JWT_SECRET`** - JWT secret key for your application (generate with `openssl rand -base64 32`)
+
+### Setting Up GCP Service Account
+
+```bash
+# Create service account
+gcloud iam service-accounts create athena-ci \
+  --display-name="Athena CI/CD Service Account"
+
+# Grant permissions
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+# Create and download key
+gcloud iam service-accounts keys create key.json \
+  --iam-account=athena-ci@PROJECT_ID.iam.gserviceaccount.com
+
+# Copy the contents of key.json to GCP_SA_KEY secret
+cat key.json
+```
+
+### Setting Up Artifact Registry
+
+```bash
+# Create Artifact Registry repository
+gcloud artifacts repositories create athena-docker \
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="Athena Docker images"
+```
+
+### Workflow Triggers
+
+- **Pull Requests** to main/master/develop: Run tests only
+- **Push** to main/master: Run tests → build → deploy
+- **Push** to develop: Run tests only
+
+### Manual Deployment
+
+You can also manually trigger deployment from the GitHub Actions tab.
+
+### Monitoring Deployments
+
+```bash
+# View Cloud Run service details
+gcloud run services describe athena \
+  --platform=managed \
+  --region=REGION
+
+# View service logs
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=athena" \
+  --limit=50 \
+  --format=json
+
+# Get service URL
+gcloud run services describe athena \
+  --platform=managed \
+  --region=REGION \
+  --format='value(status.url)'
+```
+
+### Cloud Run Configuration
+
+The deployment configures:
+- **Port**: 1323 (matches Dockerfile EXPOSE)
+- **Auto-scaling**: 0-10 instances
+- **Resources**: 512Mi memory, 1 CPU
+- **Access**: Public (unauthenticated)
+- **Environment**: JWT_SECRET from GitHub secrets
+
+To customize these settings, edit the `gcloud run deploy` command in `.github/workflows/test.yml:deploy` job.
+
 ## Future Enhancements
 
 - [x] Database persistence (PostgreSQL)
@@ -1104,7 +1224,7 @@ For detailed logging documentation, see [docs/logging.md](docs/logging.md).
 - [ ] Rate limiting per user/IP
 - [ ] API documentation (Swagger/OpenAPI)
 - [x] Docker support with docker-compose
-- [ ] CI/CD pipeline (GitHub Actions)
+- [x] CI/CD pipeline (GitHub Actions)
 - [ ] Metrics and monitoring (Prometheus)
 - [ ] Graceful shutdown
 - [ ] Health check endpoint with dependencies
@@ -1197,19 +1317,32 @@ go run cmd/api-server/main.go
 
 Before deploying to production:
 
-- [ ] Set a strong `JWT_SECRET` environment variable
-- [ ] Replace in-memory repositories with database implementations
+### Security
+- [ ] Set a strong `JWT_SECRET` environment variable (min 32 characters)
 - [ ] Add password complexity requirements
 - [ ] Implement rate limiting
-- [ ] Add logging to external service (e.g., CloudWatch, ELK)
-- [ ] Set up monitoring and alerts
-- [ ] Enable HTTPS/TLS
 - [ ] Review and harden CORS settings
 - [ ] Add input sanitization
-- [ ] Implement refresh token mechanism
-- [ ] Add database migrations
-- [ ] Set up automated backups
 - [ ] Configure proper error handling (don't leak stack traces)
+- [ ] Enable HTTPS/TLS (handled by Cloud Run)
+- [ ] Implement refresh token mechanism
+
+### Infrastructure
+- [x] Replace in-memory repositories with database implementations (PostgreSQL)
+- [x] Set up CI/CD pipeline (GitHub Actions)
+- [ ] Configure GCP service account with minimal permissions
+- [ ] Set up automated database backups
+- [ ] Configure database connection pooling
+- [ ] Set up monitoring and alerts (Cloud Monitoring, Prometheus)
+- [ ] Add logging to external service (Cloud Logging, ELK)
+- [ ] Configure firewall rules and VPC if needed
+
+### GitHub Actions Setup
+- [ ] Add all required GitHub secrets (GCP_SA_KEY, GCP_PROJECT_ID, etc.)
+- [ ] Create GCP Artifact Registry repository
+- [ ] Set up GCP service account with proper IAM roles
+- [ ] Test deployment pipeline on staging branch first
+- [ ] Configure branch protection rules for main branch
 
 ## License
 
