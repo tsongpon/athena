@@ -214,3 +214,32 @@ func (h *BookmarkHandler) ArchiveBookmark(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
+
+func (h *BookmarkHandler) DeleteBookmark(c echo.Context) error {
+	id := c.Param("id")
+	if id == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "ID is required")
+	}
+
+	// Get authenticated user ID from JWT token
+	authenticatedUser, err := getAuthenticatedUser(c)
+	if err != nil {
+		return err
+	}
+
+	// Get the bookmark first to verify ownership
+	bookmark, err := h.bookmarkService.GetBookmark(id)
+	if err != nil {
+		return err
+	}
+
+	// Authorization check: ensure user can only delete their own bookmarks
+	if bookmark.UserID != authenticatedUser.UserID {
+		return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+	}
+
+	if err := h.bookmarkService.DeleteBookmark(id); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}

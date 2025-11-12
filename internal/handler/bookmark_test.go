@@ -1137,3 +1137,241 @@ func BenchmarkBookmarkHandler_GetBookmark(b *testing.B) {
 		_ = handler.GetBookmark(c)
 	}
 }
+
+func TestBookmarkHandler_DeleteBookmark_Success(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	// Simulate Echo JWT middleware setting token in context
+	c.Set("user", &JWTClaims{UserID: "user123", Email: "test@example.com", Name: "Test User"})
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	existingBookmark := model.Bookmark{
+		ID:         "bookmark123",
+		URL:        "https://example.com",
+		Title:      "Example Site",
+		UserID:     "user123",
+		IsArchived: false,
+	}
+
+	mockService.On("GetBookmark", "bookmark123").Return(existingBookmark, nil)
+	mockService.On("DeleteBookmark", "bookmark123").Return(nil)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, "", rec.Body.String())
+
+	mockService.AssertExpectations(t)
+}
+
+func TestBookmarkHandler_DeleteBookmark_MissingID(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusBadRequest, httpErr.Code)
+	assert.Equal(t, "ID is required", httpErr.Message)
+}
+
+func TestBookmarkHandler_DeleteBookmark_EmptyID(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("")
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusBadRequest, httpErr.Code)
+	assert.Equal(t, "ID is required", httpErr.Message)
+}
+
+func TestBookmarkHandler_DeleteBookmark_MissingAuthentication(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	// Do not set user in context to simulate missing authentication
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Equal(t, "User not authenticated", httpErr.Message)
+}
+
+func TestBookmarkHandler_DeleteBookmark_Forbidden_DifferentUser(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	// User user456 trying to delete user123's bookmark
+	c.Set("user", &JWTClaims{UserID: "user456", Email: "other@example.com", Name: "Other User"})
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	bookmarkOwnedByDifferentUser := model.Bookmark{
+		ID:         "bookmark123",
+		URL:        "https://example.com",
+		Title:      "Example Site",
+		UserID:     "user123", // Owned by different user
+		IsArchived: false,
+	}
+
+	mockService.On("GetBookmark", "bookmark123").Return(bookmarkOwnedByDifferentUser, nil)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusForbidden, httpErr.Code)
+	assert.Equal(t, "Access denied", httpErr.Message)
+
+	mockService.AssertExpectations(t)
+}
+
+func TestBookmarkHandler_DeleteBookmark_BookmarkNotFound(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/nonexistent", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("nonexistent")
+
+	// Simulate Echo JWT middleware setting token in context
+	c.Set("user", &JWTClaims{UserID: "user123", Email: "test@example.com", Name: "Test User"})
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	mockService.On("GetBookmark", "nonexistent").Return(model.Bookmark{}, errors.New("bookmark not found"))
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	mockService.AssertExpectations(t)
+}
+
+func TestBookmarkHandler_DeleteBookmark_ServiceError(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	// Simulate Echo JWT middleware setting token in context
+	c.Set("user", &JWTClaims{UserID: "user123", Email: "test@example.com", Name: "Test User"})
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	existingBookmark := model.Bookmark{
+		ID:         "bookmark123",
+		URL:        "https://example.com",
+		Title:      "Example Site",
+		UserID:     "user123",
+		IsArchived: false,
+	}
+
+	mockService.On("GetBookmark", "bookmark123").Return(existingBookmark, nil)
+	mockService.On("DeleteBookmark", "bookmark123").Return(errors.New("database error"))
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	mockService.AssertExpectations(t)
+}
+
+func TestBookmarkHandler_DeleteBookmark_ArchivedBookmark(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	// Simulate Echo JWT middleware setting token in context
+	c.Set("user", &JWTClaims{UserID: "user123", Email: "test@example.com", Name: "Test User"})
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	archivedBookmark := model.Bookmark{
+		ID:         "bookmark123",
+		URL:        "https://example.com",
+		Title:      "Example Site",
+		UserID:     "user123",
+		IsArchived: true, // Archived bookmark
+	}
+
+	mockService.On("GetBookmark", "bookmark123").Return(archivedBookmark, nil)
+	mockService.On("DeleteBookmark", "bookmark123").Return(nil)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, "", rec.Body.String())
+
+	mockService.AssertExpectations(t)
+}
+
+func TestBookmarkHandler_DeleteBookmark_NullUserContext(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/bookmarks/bookmark123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("bookmark123")
+
+	c.Set("user", nil)
+
+	mockService := new(MockBookmarkService)
+	handler := NewBookmarkHandler(mockService)
+
+	err := handler.DeleteBookmark(c)
+
+	assert.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.Equal(t, "User not authenticated", httpErr.Message)
+}

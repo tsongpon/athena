@@ -125,6 +125,7 @@ func main() {
 	e.GET("/bookmarks/:id", bookmarkHandler.GetBookmark, echojwt.WithConfig(jwtConfig))
 	e.GET("/bookmarks", bookmarkHandler.GetBookmarks, echojwt.WithConfig(jwtConfig))
 	e.POST("/bookmarks/:id/archive", bookmarkHandler.ArchiveBookmark, echojwt.WithConfig(jwtConfig))
+	e.DELETE("/bookmarks/:id", bookmarkHandler.DeleteBookmark, echojwt.WithConfig(jwtConfig))
 
 	// Start server
 	port := os.Getenv("PORT")
