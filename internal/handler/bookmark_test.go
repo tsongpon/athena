@@ -90,13 +90,14 @@ func TestBookmarkHandler_CreateBookmark_Success(t *testing.T) {
 	handler := NewBookmarkHandler(mockService)
 
 	expectedBookmark := model.Bookmark{
-		ID:           "bookmark123",
-		URL:          "https://example.com",
-		Title:        "Example Site",
-		UserID:       "user123",
-		MainImageURL: "https://example.com/image.png",
-		IsArchived:   false,
-		CreatedAt:    time.Now(),
+		ID:             "bookmark123",
+		URL:            "https://example.com",
+		Title:          "Example Site",
+		UserID:         "user123",
+		MainImageURL:   "https://example.com/image.png",
+		ContentSummary: "This is a test website with example content.",
+		IsArchived:     false,
+		CreatedAt:      time.Now(),
 	}
 
 	mockService.On("CreateBookmark", mock.MatchedBy(func(b model.Bookmark) bool {
@@ -116,6 +117,7 @@ func TestBookmarkHandler_CreateBookmark_Success(t *testing.T) {
 	assert.Equal(t, expectedBookmark.Title, responseTransport.Title)
 	assert.Equal(t, expectedBookmark.UserID, responseTransport.UserID)
 	assert.Equal(t, expectedBookmark.MainImageURL, responseTransport.MainImageURL)
+	assert.Equal(t, expectedBookmark.ContentSummary, responseTransport.ContentSummary)
 	assert.Equal(t, expectedBookmark.IsArchived, responseTransport.IsArchived)
 
 	mockService.AssertExpectations(t)
@@ -226,13 +228,14 @@ func TestBookmarkHandler_GetBookmark_Success(t *testing.T) {
 	handler := NewBookmarkHandler(mockService)
 
 	expectedBookmark := model.Bookmark{
-		ID:           "bookmark123",
-		URL:          "https://example.com",
-		Title:        "Example Site",
-		UserID:       "user123",
-		MainImageURL: "https://example.com/og-image.jpg",
-		IsArchived:   false,
-		CreatedAt:    time.Now(),
+		ID:             "bookmark123",
+		URL:            "https://example.com",
+		Title:          "Example Site",
+		UserID:         "user123",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: "A comprehensive example site with tutorials.",
+		IsArchived:     false,
+		CreatedAt:      time.Now(),
 	}
 
 	mockService.On("GetBookmark", "bookmark123").Return(expectedBookmark, nil)
@@ -250,6 +253,7 @@ func TestBookmarkHandler_GetBookmark_Success(t *testing.T) {
 	assert.Equal(t, expectedBookmark.Title, responseTransport.Title)
 	assert.Equal(t, expectedBookmark.UserID, responseTransport.UserID)
 	assert.Equal(t, expectedBookmark.MainImageURL, responseTransport.MainImageURL)
+	assert.Equal(t, expectedBookmark.ContentSummary, responseTransport.ContentSummary)
 
 	mockService.AssertExpectations(t)
 }
@@ -308,22 +312,24 @@ func TestBookmarkHandler_GetBookmarks_Success(t *testing.T) {
 
 	expectedBookmarks := []model.Bookmark{
 		{
-			ID:           "bookmark1",
-			URL:          "https://example1.com",
-			Title:        "Example 1",
-			UserID:       "user123",
-			MainImageURL: "https://example1.com/image1.png",
-			IsArchived:   false,
-			CreatedAt:    time.Now(),
+			ID:             "bookmark1",
+			URL:            "https://example1.com",
+			Title:          "Example 1",
+			UserID:         "user123",
+			MainImageURL:   "https://example1.com/image1.png",
+			ContentSummary: "First example website with great content.",
+			IsArchived:     false,
+			CreatedAt:      time.Now(),
 		},
 		{
-			ID:           "bookmark2",
-			URL:          "https://example2.com",
-			Title:        "Example 2",
-			UserID:       "user123",
-			MainImageURL: "https://example2.com/image2.png",
-			IsArchived:   false,
-			CreatedAt:    time.Now(),
+			ID:             "bookmark2",
+			URL:            "https://example2.com",
+			Title:          "Example 2",
+			UserID:         "user123",
+			MainImageURL:   "https://example2.com/image2.png",
+			ContentSummary: "Second example with helpful resources.",
+			IsArchived:     false,
+			CreatedAt:      time.Now(),
 		},
 	}
 
@@ -340,8 +346,10 @@ func TestBookmarkHandler_GetBookmarks_Success(t *testing.T) {
 	assert.Equal(t, 2, len(responseTransports))
 	assert.Equal(t, expectedBookmarks[0].ID, responseTransports[0].ID)
 	assert.Equal(t, expectedBookmarks[0].MainImageURL, responseTransports[0].MainImageURL)
+	assert.Equal(t, expectedBookmarks[0].ContentSummary, responseTransports[0].ContentSummary)
 	assert.Equal(t, expectedBookmarks[1].ID, responseTransports[1].ID)
 	assert.Equal(t, expectedBookmarks[1].MainImageURL, responseTransports[1].MainImageURL)
+	assert.Equal(t, expectedBookmarks[1].ContentSummary, responseTransports[1].ContentSummary)
 
 	mockService.AssertExpectations(t)
 }
@@ -360,13 +368,14 @@ func TestBookmarkHandler_GetBookmarks_ArchivedTrue(t *testing.T) {
 
 	expectedBookmarks := []model.Bookmark{
 		{
-			ID:           "bookmark1",
-			URL:          "https://example1.com",
-			Title:        "Example 1",
-			UserID:       "user123",
-			MainImageURL: "https://example1.com/archived-image.png",
-			IsArchived:   true,
-			CreatedAt:    time.Now(),
+			ID:             "bookmark1",
+			URL:            "https://example1.com",
+			Title:          "Example 1",
+			UserID:         "user123",
+			MainImageURL:   "https://example1.com/archived-image.png",
+			ContentSummary: "Archived content summary for example 1.",
+			IsArchived:     true,
+			CreatedAt:      time.Now(),
 		},
 	}
 

@@ -3,6 +3,7 @@ package repository
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -362,6 +363,188 @@ func TestExtractTitle(t *testing.T) {
 				if title != tt.wantTitle {
 					t.Errorf("extractTitle() title = %v, want %v", title, tt.wantTitle)
 				}
+			}
+		})
+	}
+}
+
+func TestWebRepository_GetContentSummary_EmptyURL(t *testing.T) {
+	repo := NewWebRepository()
+
+	// Test with empty URL
+	_, err := repo.GetContentSummary("")
+	if err == nil {
+		t.Error("GetContentSummary() with empty URL should return error")
+		return
+	}
+
+	expectedError := "URL cannot be empty"
+	if err.Error() != expectedError {
+		t.Errorf("GetContentSummary() error = %v, want %v", err.Error(), expectedError)
+	}
+}
+
+func TestWebRepository_GetContentSummary_NoAPIKey(t *testing.T) {
+	repo := NewWebRepository()
+
+	// Ensure OPENAI_API_KEY is not set
+	originalAPIKey := os.Getenv("OPENAI_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	defer func() {
+		if originalAPIKey != "" {
+			os.Setenv("OPENAI_API_KEY", originalAPIKey)
+		}
+	}()
+
+	// Create a test server that returns HTML
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		html := `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>Test Page</title>
+		</head>
+		<body>
+			<h1>Test Content</h1>
+			<p>This is a test paragraph.</p>
+		</body>
+		</html>
+		`
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(html))
+	}))
+	defer server.Close()
+
+	// Test getting summary without API key - should return empty string
+	summary, err := repo.GetContentSummary(server.URL)
+	if err != nil {
+		t.Errorf("GetContentSummary() without API key should not return error, got %v", err)
+		return
+	}
+
+	if summary != "" {
+		t.Errorf("GetContentSummary() without API key should return empty string, got %v", summary)
+	}
+}
+
+func TestWebRepository_GetContentSummary_InvalidURL(t *testing.T) {
+	repo := NewWebRepository()
+
+	// Test with invalid URL - should return empty string
+	summary, err := repo.GetContentSummary("not-a-valid-url")
+	if err != nil {
+		t.Errorf("GetContentSummary() with invalid URL should not return error, got %v", err)
+		return
+	}
+
+	if summary != "" {
+		t.Errorf("GetContentSummary() with invalid URL should return empty string, got %v", summary)
+	}
+}
+
+func TestWebRepository_GetContentSummary_NotFound(t *testing.T) {
+	repo := NewWebRepository()
+
+	// Create a test server that returns 404
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Test getting summary from 404 page - should return empty string
+	summary, err := repo.GetContentSummary(server.URL)
+	if err != nil {
+		t.Errorf("GetContentSummary() with 404 status should not return error, got %v", err)
+		return
+	}
+
+	if summary != "" {
+		t.Errorf("GetContentSummary() with 404 should return empty string, got %v", summary)
+	}
+}
+
+func TestWebRepository_GetContentSummary_NoTextContent(t *testing.T) {
+	repo := NewWebRepository()
+
+	// Create a test server that returns HTML with no text content
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		html := `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>Test Page</title>
+			<script>console.log('test');</script>
+			<style>body { color: red; }</style>
+		</head>
+		<body>
+		</body>
+		</html>
+		`
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(html))
+	}))
+	defer server.Close()
+
+	// Test getting summary from page with no text content - should return empty string
+	summary, err := repo.GetContentSummary(server.URL)
+	if err != nil {
+		t.Errorf("GetContentSummary() with no text content should not return error, got %v", err)
+		return
+	}
+
+	if summary != "" {
+		t.Errorf("GetContentSummary() with no text content should return empty string, got %v", summary)
+	}
+}
+
+func TestExtractTextContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		wantText string
+	}{
+		{
+			name:     "Simple HTML with text",
+			html:     `<!DOCTYPE html><html><body><p>Hello World</p></body></html>`,
+			wantText: "Hello World",
+		},
+		{
+			name:     "HTML with script tags - should skip",
+			html:     `<!DOCTYPE html><html><body><script>alert('test');</script><p>Hello</p></body></html>`,
+			wantText: "Hello",
+		},
+		{
+			name:     "HTML with style tags - should skip",
+			html:     `<!DOCTYPE html><html><head><style>body { color: red; }</style></head><body><p>Hello</p></body></html>`,
+			wantText: "Hello",
+		},
+		{
+			name:     "Multiple paragraphs",
+			html:     `<!DOCTYPE html><html><body><p>First paragraph</p><p>Second paragraph</p></body></html>`,
+			wantText: "First paragraph Second paragraph",
+		},
+		{
+			name:     "Text with whitespace - should trim and normalize",
+			html:     `<!DOCTYPE html><html><body><p>   Text with   spaces   </p></body></html>`,
+			wantText: "Text with   spaces",
+		},
+		{
+			name:     "Empty HTML",
+			html:     `<!DOCTYPE html><html><body></body></html>`,
+			wantText: "",
+		},
+		{
+			name:     "HTML with nested elements",
+			html:     `<!DOCTYPE html><html><body><div><p><span>Nested</span> text</p></div></body></html>`,
+			wantText: "Nested text",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			text := extractTextContent(tt.html)
+			if text != tt.wantText {
+				t.Errorf("extractTextContent() = %v, want %v", text, tt.wantText)
 			}
 		})
 	}

@@ -31,41 +31,44 @@ func NewBookmarkFirestoreRepository(ctx context.Context, client *firestore.Clien
 
 // firestoreBookmark is the structure used to store/retrieve bookmarks in Firestore
 type firestoreBookmark struct {
-	ID           string    `firestore:"id"`
-	UserID       string    `firestore:"user_id"`
-	URL          string    `firestore:"url"`
-	Title        string    `firestore:"title"`
-	IsArchived   bool      `firestore:"is_archived"`
-	MainImageURL string    `firestore:"main_image_url"`
-	CreatedAt    time.Time `firestore:"created_at"`
-	UpdatedAt    time.Time `firestore:"updated_at"`
+	ID             string    `firestore:"id"`
+	UserID         string    `firestore:"user_id"`
+	URL            string    `firestore:"url"`
+	Title          string    `firestore:"title"`
+	IsArchived     bool      `firestore:"is_archived"`
+	MainImageURL   string    `firestore:"main_image_url"`
+	ContentSummary string    `firestore:"content_summary"`
+	CreatedAt      time.Time `firestore:"created_at"`
+	UpdatedAt      time.Time `firestore:"updated_at"`
 }
 
 // toFirestoreBookmark converts model.Bookmark to firestoreBookmark
 func toFirestoreBookmark(bookmark model.Bookmark) firestoreBookmark {
 	return firestoreBookmark{
-		ID:           bookmark.ID,
-		UserID:       bookmark.UserID,
-		URL:          bookmark.URL,
-		Title:        bookmark.Title,
-		IsArchived:   bookmark.IsArchived,
-		MainImageURL: bookmark.MainImageURL,
-		CreatedAt:    bookmark.CreatedAt,
-		UpdatedAt:    bookmark.UpdatedAt,
+		ID:             bookmark.ID,
+		UserID:         bookmark.UserID,
+		URL:            bookmark.URL,
+		Title:          bookmark.Title,
+		IsArchived:     bookmark.IsArchived,
+		MainImageURL:   bookmark.MainImageURL,
+		ContentSummary: bookmark.ContentSummary,
+		CreatedAt:      bookmark.CreatedAt,
+		UpdatedAt:      bookmark.UpdatedAt,
 	}
 }
 
 // toModelBookmark converts firestoreBookmark to model.Bookmark
 func toModelBookmark(fsBookmark firestoreBookmark) model.Bookmark {
 	return model.Bookmark{
-		ID:           fsBookmark.ID,
-		UserID:       fsBookmark.UserID,
-		URL:          fsBookmark.URL,
-		Title:        fsBookmark.Title,
-		IsArchived:   fsBookmark.IsArchived,
-		MainImageURL: fsBookmark.MainImageURL,
-		CreatedAt:    fsBookmark.CreatedAt,
-		UpdatedAt:    fsBookmark.UpdatedAt,
+		ID:             fsBookmark.ID,
+		UserID:         fsBookmark.UserID,
+		URL:            fsBookmark.URL,
+		Title:          fsBookmark.Title,
+		IsArchived:     fsBookmark.IsArchived,
+		MainImageURL:   fsBookmark.MainImageURL,
+		ContentSummary: fsBookmark.ContentSummary,
+		CreatedAt:      fsBookmark.CreatedAt,
+		UpdatedAt:      fsBookmark.UpdatedAt,
 	}
 }
 

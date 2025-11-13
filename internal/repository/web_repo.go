@@ -1,12 +1,16 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tsongpon/athena/internal/logger"
 	"go.uber.org/zap"
 	"golang.org/x/net/html"
@@ -52,6 +56,108 @@ func (r *WebRepository) GetTitle(url string) (string, error) {
 	}
 
 	return title, nil
+}
+
+// GetContentSummary fetches the HTML content from the given URL and uses LangChain with OpenAI
+// to generate a summary within 500 characters
+func (r *WebRepository) GetContentSummary(url string) (string, error) {
+	if url == "" {
+		return "", fmt.Errorf("URL cannot be empty")
+	}
+
+	// Fetch the URL
+	resp, err := r.httpClient.Get(url)
+	if err != nil {
+		logger.Debug("failed to fetch content from URL", zap.String("url", url), zap.Error(err))
+		return "", nil
+	}
+	defer resp.Body.Close()
+
+	// Check for successful response
+	if resp.StatusCode != http.StatusOK {
+		logger.Debug("failed to fetch content from URL", zap.String("url", url), zap.Int("status_code", resp.StatusCode))
+		return "", nil
+	}
+
+	// Read the HTML body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Debug("failed to read response body", zap.String("url", url), zap.Error(err))
+		return "", nil
+	}
+
+	// Extract text content from HTML
+	textContent := extractTextContent(string(bodyBytes))
+	if textContent == "" {
+		logger.Debug("no text content found", zap.String("url", url))
+		return "", nil
+	}
+
+	// Limit the text content to avoid token limits (first 4000 characters)
+	if len(textContent) > 4000 {
+		textContent = textContent[:4000]
+	}
+
+	// Use OpenAI via LangChain to summarize
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		logger.Debug("OPENAI_API_KEY not set, skipping summarization")
+		return "", nil
+	}
+
+	llm, err := openai.New(openai.WithToken(apiKey))
+	if err != nil {
+		logger.Debug("failed to create OpenAI client", zap.Error(err))
+		return "", nil
+	}
+
+	ctx := context.Background()
+	prompt := fmt.Sprintf("Summarize the following website content in 500 characters or less. Be concise and capture the main points:\n\n%s", textContent)
+
+	summary, err := llms.GenerateFromSinglePrompt(ctx, llm, prompt)
+	if err != nil {
+		logger.Debug("failed to generate summary", zap.String("url", url), zap.Error(err))
+		return "", nil
+	}
+
+	// Trim summary to 500 characters if it exceeds
+	if len(summary) > 500 {
+		summary = summary[:497] + "..."
+	}
+
+	return strings.TrimSpace(summary), nil
+}
+
+// extractTextContent extracts readable text content from HTML
+func extractTextContent(htmlContent string) string {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return ""
+	}
+
+	var textBuilder strings.Builder
+	var extractText func(*html.Node)
+	extractText = func(n *html.Node) {
+		// Skip script and style tags
+		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
+			return
+		}
+
+		if n.Type == html.TextNode {
+			text := strings.TrimSpace(n.Data)
+			if text != "" {
+				textBuilder.WriteString(text)
+				textBuilder.WriteString(" ")
+			}
+		}
+
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			extractText(c)
+		}
+	}
+	extractText(doc)
+
+	return strings.TrimSpace(textBuilder.String())
 }
 
 // GetMainImage fetches the HTML content from the given URL and extracts the OpenGraph image URL

@@ -60,12 +60,13 @@ func (h *BookmarkHandler) CreateBookmark(c echo.Context) error {
 		zap.String("user_id", createdBookmark.UserID),
 		zap.String("url", createdBookmark.URL))
 	responseTransport := transport.BookmarkTransport{
-		ID:           createdBookmark.ID,
-		URL:          createdBookmark.URL,
-		Title:        createdBookmark.Title,
-		UserID:       createdBookmark.UserID,
-		MainImageURL: createdBookmark.MainImageURL,
-		IsArchived:   createdBookmark.IsArchived,
+		ID:             createdBookmark.ID,
+		URL:            createdBookmark.URL,
+		Title:          createdBookmark.Title,
+		UserID:         createdBookmark.UserID,
+		MainImageURL:   createdBookmark.MainImageURL,
+		ContentSummary: createdBookmark.ContentSummary,
+		IsArchived:     createdBookmark.IsArchived,
 	}
 	return c.JSON(http.StatusCreated, responseTransport)
 }
@@ -93,12 +94,13 @@ func (h *BookmarkHandler) GetBookmark(c echo.Context) error {
 	}
 
 	t := transport.BookmarkTransport{
-		ID:           bookmark.ID,
-		URL:          bookmark.URL,
-		Title:        bookmark.Title,
-		UserID:       bookmark.UserID,
-		MainImageURL: bookmark.MainImageURL,
-		IsArchived:   bookmark.IsArchived,
+		ID:             bookmark.ID,
+		URL:            bookmark.URL,
+		Title:          bookmark.Title,
+		UserID:         bookmark.UserID,
+		MainImageURL:   bookmark.MainImageURL,
+		ContentSummary: bookmark.ContentSummary,
+		IsArchived:     bookmark.IsArchived,
 	}
 	return c.JSON(http.StatusOK, t)
 }
@@ -148,13 +150,14 @@ func (h *BookmarkHandler) GetBookmarks(c echo.Context) error {
 		ts := make([]transport.BookmarkTransport, len(response.Bookmarks))
 		for i, b := range response.Bookmarks {
 			ts[i] = transport.BookmarkTransport{
-				ID:           b.ID,
-				URL:          b.URL,
-				Title:        b.Title,
-				UserID:       b.UserID,
-				MainImageURL: b.MainImageURL,
-				CreatedAt:    b.CreatedAt,
-				IsArchived:   b.IsArchived,
+				ID:             b.ID,
+				URL:            b.URL,
+				Title:          b.Title,
+				UserID:         b.UserID,
+				MainImageURL:   b.MainImageURL,
+				ContentSummary: b.ContentSummary,
+				CreatedAt:      b.CreatedAt,
+				IsArchived:     b.IsArchived,
 			}
 		}
 
@@ -178,13 +181,14 @@ func (h *BookmarkHandler) GetBookmarks(c echo.Context) error {
 	ts := make([]transport.BookmarkTransport, len(bookmarks))
 	for i, b := range bookmarks {
 		ts[i] = transport.BookmarkTransport{
-			ID:           b.ID,
-			URL:          b.URL,
-			Title:        b.Title,
-			UserID:       b.UserID,
-			MainImageURL: b.MainImageURL,
-			CreatedAt:    b.CreatedAt,
-			IsArchived:   b.IsArchived,
+			ID:             b.ID,
+			URL:            b.URL,
+			Title:          b.Title,
+			UserID:         b.UserID,
+			MainImageURL:   b.MainImageURL,
+			ContentSummary: b.ContentSummary,
+			CreatedAt:      b.CreatedAt,
+			IsArchived:     b.IsArchived,
 		}
 	}
 	return c.JSON(http.StatusOK, ts)
