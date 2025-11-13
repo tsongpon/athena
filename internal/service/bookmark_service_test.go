@@ -83,11 +83,12 @@ func (m *MockWebRepository) GetMainImage(url string) (string, error) {
 // TestBookmarkService_CreateBookmark tests successful bookmark creation
 func TestBookmarkService_CreateBookmark(t *testing.T) {
 	expectedBookmark := model.Bookmark{
-		ID:        "bookmark-1",
-		UserID:    "user-1",
-		URL:       "https://example.com",
-		Title:     "Example",
-		CreatedAt: time.Now(),
+		ID:           "bookmark-1",
+		UserID:       "user-1",
+		URL:          "https://example.com",
+		Title:        "Example",
+		MainImageURL: "https://example.com/og-image.jpg",
+		CreatedAt:    time.Now(),
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -98,11 +99,24 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 			if bookmark.URL != "https://example.com" {
 				t.Errorf("CreateBookmark() received URL = %v, want https://example.com", bookmark.URL)
 			}
+			if bookmark.Title != "Example" {
+				t.Errorf("CreateBookmark() received Title = %v, want Example", bookmark.Title)
+			}
+			if bookmark.MainImageURL != "https://example.com/og-image.jpg" {
+				t.Errorf("CreateBookmark() received MainImageURL = %v, want https://example.com/og-image.jpg", bookmark.MainImageURL)
+			}
 			return expectedBookmark, nil
 		},
 	}
 
-	mockWebRepo := &MockWebRepository{}
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Example", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/og-image.jpg", nil
+		},
+	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
@@ -123,6 +137,9 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 	if result.URL != expectedBookmark.URL {
 		t.Errorf("CreateBookmark() result URL = %v, want %v", result.URL, expectedBookmark.URL)
 	}
+	if result.MainImageURL != expectedBookmark.MainImageURL {
+		t.Errorf("CreateBookmark() result MainImageURL = %v, want %v", result.MainImageURL, expectedBookmark.MainImageURL)
+	}
 }
 
 // TestBookmarkService_CreateBookmark_RepositoryError tests error handling when repository fails
@@ -133,7 +150,14 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 		},
 	}
 
-	mockWebRepo := &MockWebRepository{}
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Test Title", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/image.jpg", nil
+		},
+	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
@@ -151,6 +175,35 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 	}
 }
 
+// TestBookmarkService_CreateBookmark_GetMainImageError tests error handling when GetMainImage fails
+func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Test Title", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "", fmt.Errorf("failed to fetch og:image")
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	_, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-1",
+		URL:    "https://example.com",
+	})
+
+	if err == nil {
+		t.Error("CreateBookmark() should return error when GetMainImage fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to fetch main image URL for URL https://example.com"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
 // TestBookmarkService_CreateBookmark_EmptyURL tests creating bookmark with empty URL
 func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{
@@ -162,7 +215,14 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 		},
 	}
 
-	mockWebRepo := &MockWebRepository{}
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "", nil
+		},
+	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
@@ -190,7 +250,14 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 		},
 	}
 
-	mockWebRepo := &MockWebRepository{}
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Title", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/image.jpg", nil
+		},
+	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "",
@@ -216,7 +283,16 @@ func TestBookmarkService_CreateBookmark_NonEmptyID(t *testing.T) {
 		},
 	}
 
-	mockWebRepo := &MockWebRepository{}
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			t.Error("GetTitle() should not be called when ID validation fails")
+			return "", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			t.Error("GetMainImage() should not be called when ID validation fails")
+			return "", nil
+		},
+	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		ID:     "existing-id",
@@ -487,11 +563,12 @@ func TestBookmarkService_ArchiveBookmark_EmptyBookmarkID(t *testing.T) {
 // TestBookmarkService_GetBookmark tests successful bookmark retrieval
 func TestBookmarkService_GetBookmark(t *testing.T) {
 	expectedBookmark := model.Bookmark{
-		ID:        "bookmark-1",
-		UserID:    "user-1",
-		URL:       "https://example.com",
-		Title:     "Example",
-		CreatedAt: time.Now(),
+		ID:           "bookmark-1",
+		UserID:       "user-1",
+		URL:          "https://example.com",
+		Title:        "Example",
+		MainImageURL: "https://example.com/og-image.jpg",
+		CreatedAt:    time.Now(),
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -523,6 +600,9 @@ func TestBookmarkService_GetBookmark(t *testing.T) {
 	}
 	if result.Title != expectedBookmark.Title {
 		t.Errorf("GetBookmark() result Title = %v, want %v", result.Title, expectedBookmark.Title)
+	}
+	if result.MainImageURL != expectedBookmark.MainImageURL {
+		t.Errorf("GetBookmark() result MainImageURL = %v, want %v", result.MainImageURL, expectedBookmark.MainImageURL)
 	}
 }
 
@@ -600,18 +680,20 @@ func TestBookmarkService_GetBookmark_NotFound(t *testing.T) {
 func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	expectedBookmarks := []model.Bookmark{
 		{
-			ID:        "bookmark-1",
-			UserID:    "user-1",
-			URL:       "https://example1.com",
-			Title:     "Example 1",
-			CreatedAt: time.Now(),
+			ID:           "bookmark-1",
+			UserID:       "user-1",
+			URL:          "https://example1.com",
+			Title:        "Example 1",
+			MainImageURL: "https://example1.com/image1.jpg",
+			CreatedAt:    time.Now(),
 		},
 		{
-			ID:        "bookmark-2",
-			UserID:    "user-1",
-			URL:       "https://example2.com",
-			Title:     "Example 2",
-			CreatedAt: time.Now(),
+			ID:           "bookmark-2",
+			UserID:       "user-1",
+			URL:          "https://example2.com",
+			Title:        "Example 2",
+			MainImageURL: "https://example2.com/image2.jpg",
+			CreatedAt:    time.Now(),
 		},
 	}
 
@@ -641,8 +723,14 @@ func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	if result[0].ID != "bookmark-1" {
 		t.Errorf("GetAllBookmarks() first bookmark ID = %v, want bookmark-1", result[0].ID)
 	}
+	if result[0].MainImageURL != "https://example1.com/image1.jpg" {
+		t.Errorf("GetAllBookmarks() first bookmark MainImageURL = %v, want https://example1.com/image1.jpg", result[0].MainImageURL)
+	}
 	if result[1].ID != "bookmark-2" {
 		t.Errorf("GetAllBookmarks() second bookmark ID = %v, want bookmark-2", result[1].ID)
+	}
+	if result[1].MainImageURL != "https://example2.com/image2.jpg" {
+		t.Errorf("GetAllBookmarks() second bookmark MainImageURL = %v, want https://example2.com/image2.jpg", result[1].MainImageURL)
 	}
 }
 
@@ -831,8 +919,8 @@ func TestNewBookmarkService(t *testing.T) {
 // TestBookmarkService_GetBookmarksWithPagination tests successful paginated retrieval
 func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
 	expectedBookmarks := []model.Bookmark{
-		{ID: "bookmark-1", UserID: "user-1", URL: "https://example1.com", Title: "Example 1"},
-		{ID: "bookmark-2", UserID: "user-1", URL: "https://example2.com", Title: "Example 2"},
+		{ID: "bookmark-1", UserID: "user-1", URL: "https://example1.com", Title: "Example 1", MainImageURL: "https://example1.com/og1.jpg"},
+		{ID: "bookmark-2", UserID: "user-1", URL: "https://example2.com", Title: "Example 2", MainImageURL: "https://example2.com/og2.jpg"},
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -855,6 +943,12 @@ func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
 
 	if len(result.Bookmarks) != 2 {
 		t.Errorf("GetBookmarksWithPagination() returned %d bookmarks, want 2", len(result.Bookmarks))
+	}
+	if result.Bookmarks[0].MainImageURL != "https://example1.com/og1.jpg" {
+		t.Errorf("GetBookmarksWithPagination() first bookmark MainImageURL = %v, want https://example1.com/og1.jpg", result.Bookmarks[0].MainImageURL)
+	}
+	if result.Bookmarks[1].MainImageURL != "https://example2.com/og2.jpg" {
+		t.Errorf("GetBookmarksWithPagination() second bookmark MainImageURL = %v, want https://example2.com/og2.jpg", result.Bookmarks[1].MainImageURL)
 	}
 	if result.TotalCount != 10 {
 		t.Errorf("GetBookmarksWithPagination() TotalCount = %d, want 10", result.TotalCount)
