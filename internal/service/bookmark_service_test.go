@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -90,6 +91,10 @@ func (m *MockWebRepository) GetContentSummary(url string) (string, error) {
 
 // TestBookmarkService_CreateBookmark tests successful bookmark creation
 func TestBookmarkService_CreateBookmark(t *testing.T) {
+	// Set environment variable to enable content summary
+	os.Setenv("LLM_SUMMARY_CONTENT", "true")
+	defer os.Unsetenv("LLM_SUMMARY_CONTENT")
+
 	expectedBookmark := model.Bookmark{
 		ID:             "bookmark-1",
 		UserID:         "user-1",
@@ -231,6 +236,10 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 
 // TestBookmarkService_CreateBookmark_GetContentSummaryError tests error handling when GetContentSummary fails
 func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
+	// Set environment variable to enable content summary
+	os.Setenv("LLM_SUMMARY_CONTENT", "true")
+	defer os.Unsetenv("LLM_SUMMARY_CONTENT")
+
 	mockRepo := &MockBookmarkRepository{}
 
 	mockWebRepo := &MockWebRepository{
