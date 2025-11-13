@@ -20,7 +20,8 @@ type MockBookmarkRepository struct {
 
 // MockWebRepository is a mock implementation of WebRepository for testing
 type MockWebRepository struct {
-	getTitleFunc func(url string) (string, error)
+	getTitleFunc     func(url string) (string, error)
+	getMainImageFunc func(url string) (string, error)
 }
 
 func (m *MockBookmarkRepository) CreateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
@@ -70,6 +71,13 @@ func (m *MockWebRepository) GetTitle(url string) (string, error) {
 		return m.getTitleFunc(url)
 	}
 	return "Default Title", nil
+}
+
+func (m *MockWebRepository) GetMainImage(url string) (string, error) {
+	if m.getMainImageFunc != nil {
+		return m.getMainImageFunc(url)
+	}
+	return "", nil
 }
 
 // TestBookmarkService_CreateBookmark tests successful bookmark creation

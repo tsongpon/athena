@@ -20,4 +20,5 @@ type BookmarkRepository interface {
 
 type WebRepository interface {
 	GetTitle(url string) (string, error)
+	GetMainImage(url string) (string, error)
 }
