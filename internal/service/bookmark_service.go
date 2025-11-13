@@ -35,7 +35,12 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to fetch main image URL for URL %s: %w", b.URL, err)
 	}
+	content, err := s.webRepository.GetContentSummary(b.URL)
+	if err != nil {
+		return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
+	}
 	b.Title = webTitle
+	b.ContentSummary = content
 	b.MainImageURL = mainImageURL
 	b.IsArchived = false
 	createdBookmark, err := s.bookmarkRepository.CreateBookmark(b)

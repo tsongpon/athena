@@ -91,12 +91,13 @@ func (m *MockWebRepository) GetContentSummary(url string) (string, error) {
 // TestBookmarkService_CreateBookmark tests successful bookmark creation
 func TestBookmarkService_CreateBookmark(t *testing.T) {
 	expectedBookmark := model.Bookmark{
-		ID:           "bookmark-1",
-		UserID:       "user-1",
-		URL:          "https://example.com",
-		Title:        "Example",
-		MainImageURL: "https://example.com/og-image.jpg",
-		CreatedAt:    time.Now(),
+		ID:             "bookmark-1",
+		UserID:         "user-1",
+		URL:            "https://example.com",
+		Title:          "Example",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: "This is an example website with useful content.",
+		CreatedAt:      time.Now(),
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -113,6 +114,9 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 			if bookmark.MainImageURL != "https://example.com/og-image.jpg" {
 				t.Errorf("CreateBookmark() received MainImageURL = %v, want https://example.com/og-image.jpg", bookmark.MainImageURL)
 			}
+			if bookmark.ContentSummary != "This is an example website with useful content." {
+				t.Errorf("CreateBookmark() received ContentSummary = %v, want This is an example website with useful content.", bookmark.ContentSummary)
+			}
 			return expectedBookmark, nil
 		},
 	}
@@ -123,6 +127,9 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 		},
 		getMainImageFunc: func(url string) (string, error) {
 			return "https://example.com/og-image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			return "This is an example website with useful content.", nil
 		},
 	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
@@ -148,6 +155,9 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 	if result.MainImageURL != expectedBookmark.MainImageURL {
 		t.Errorf("CreateBookmark() result MainImageURL = %v, want %v", result.MainImageURL, expectedBookmark.MainImageURL)
 	}
+	if result.ContentSummary != expectedBookmark.ContentSummary {
+		t.Errorf("CreateBookmark() result ContentSummary = %v, want %v", result.ContentSummary, expectedBookmark.ContentSummary)
+	}
 }
 
 // TestBookmarkService_CreateBookmark_RepositoryError tests error handling when repository fails
@@ -164,6 +174,9 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 		},
 		getMainImageFunc: func(url string) (string, error) {
 			return "https://example.com/image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			return "Summary text", nil
 		},
 	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
@@ -194,6 +207,10 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 		getMainImageFunc: func(url string) (string, error) {
 			return "", fmt.Errorf("failed to fetch og:image")
 		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			t.Error("GetContentSummary() should not be called when GetMainImage fails first")
+			return "", nil
+		},
 	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
@@ -207,6 +224,38 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 	}
 
 	expectedErrorSubstring := "failed to fetch main image URL for URL https://example.com"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_CreateBookmark_GetContentSummaryError tests error handling when GetContentSummary fails
+func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Test Title", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			return "", fmt.Errorf("failed to generate content summary")
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockWebRepo)
+	_, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-1",
+		URL:    "https://example.com",
+	})
+
+	if err == nil {
+		t.Error("CreateBookmark() should return error when GetContentSummary fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to fetch content for URL https://example.com"
 	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
 		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
 	}
@@ -228,6 +277,9 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 			return "", nil
 		},
 		getMainImageFunc: func(url string) (string, error) {
+			return "", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
 			return "", nil
 		},
 	}
@@ -264,6 +316,9 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 		},
 		getMainImageFunc: func(url string) (string, error) {
 			return "https://example.com/image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			return "Content summary", nil
 		},
 	}
 	service := NewBookmarkService(mockRepo, mockWebRepo)
@@ -571,12 +626,13 @@ func TestBookmarkService_ArchiveBookmark_EmptyBookmarkID(t *testing.T) {
 // TestBookmarkService_GetBookmark tests successful bookmark retrieval
 func TestBookmarkService_GetBookmark(t *testing.T) {
 	expectedBookmark := model.Bookmark{
-		ID:           "bookmark-1",
-		UserID:       "user-1",
-		URL:          "https://example.com",
-		Title:        "Example",
-		MainImageURL: "https://example.com/og-image.jpg",
-		CreatedAt:    time.Now(),
+		ID:             "bookmark-1",
+		UserID:         "user-1",
+		URL:            "https://example.com",
+		Title:          "Example",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: "Example website content summary.",
+		CreatedAt:      time.Now(),
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -611,6 +667,9 @@ func TestBookmarkService_GetBookmark(t *testing.T) {
 	}
 	if result.MainImageURL != expectedBookmark.MainImageURL {
 		t.Errorf("GetBookmark() result MainImageURL = %v, want %v", result.MainImageURL, expectedBookmark.MainImageURL)
+	}
+	if result.ContentSummary != expectedBookmark.ContentSummary {
+		t.Errorf("GetBookmark() result ContentSummary = %v, want %v", result.ContentSummary, expectedBookmark.ContentSummary)
 	}
 }
 
@@ -688,20 +747,22 @@ func TestBookmarkService_GetBookmark_NotFound(t *testing.T) {
 func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	expectedBookmarks := []model.Bookmark{
 		{
-			ID:           "bookmark-1",
-			UserID:       "user-1",
-			URL:          "https://example1.com",
-			Title:        "Example 1",
-			MainImageURL: "https://example1.com/image1.jpg",
-			CreatedAt:    time.Now(),
+			ID:             "bookmark-1",
+			UserID:         "user-1",
+			URL:            "https://example1.com",
+			Title:          "Example 1",
+			MainImageURL:   "https://example1.com/image1.jpg",
+			ContentSummary: "First example website content.",
+			CreatedAt:      time.Now(),
 		},
 		{
-			ID:           "bookmark-2",
-			UserID:       "user-1",
-			URL:          "https://example2.com",
-			Title:        "Example 2",
-			MainImageURL: "https://example2.com/image2.jpg",
-			CreatedAt:    time.Now(),
+			ID:             "bookmark-2",
+			UserID:         "user-1",
+			URL:            "https://example2.com",
+			Title:          "Example 2",
+			MainImageURL:   "https://example2.com/image2.jpg",
+			ContentSummary: "Second example website content.",
+			CreatedAt:      time.Now(),
 		},
 	}
 
@@ -734,11 +795,17 @@ func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	if result[0].MainImageURL != "https://example1.com/image1.jpg" {
 		t.Errorf("GetAllBookmarks() first bookmark MainImageURL = %v, want https://example1.com/image1.jpg", result[0].MainImageURL)
 	}
+	if result[0].ContentSummary != "First example website content." {
+		t.Errorf("GetAllBookmarks() first bookmark ContentSummary = %v, want First example website content.", result[0].ContentSummary)
+	}
 	if result[1].ID != "bookmark-2" {
 		t.Errorf("GetAllBookmarks() second bookmark ID = %v, want bookmark-2", result[1].ID)
 	}
 	if result[1].MainImageURL != "https://example2.com/image2.jpg" {
 		t.Errorf("GetAllBookmarks() second bookmark MainImageURL = %v, want https://example2.com/image2.jpg", result[1].MainImageURL)
+	}
+	if result[1].ContentSummary != "Second example website content." {
+		t.Errorf("GetAllBookmarks() second bookmark ContentSummary = %v, want Second example website content.", result[1].ContentSummary)
 	}
 }
 
@@ -927,8 +994,8 @@ func TestNewBookmarkService(t *testing.T) {
 // TestBookmarkService_GetBookmarksWithPagination tests successful paginated retrieval
 func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
 	expectedBookmarks := []model.Bookmark{
-		{ID: "bookmark-1", UserID: "user-1", URL: "https://example1.com", Title: "Example 1", MainImageURL: "https://example1.com/og1.jpg"},
-		{ID: "bookmark-2", UserID: "user-1", URL: "https://example2.com", Title: "Example 2", MainImageURL: "https://example2.com/og2.jpg"},
+		{ID: "bookmark-1", UserID: "user-1", URL: "https://example1.com", Title: "Example 1", MainImageURL: "https://example1.com/og1.jpg", ContentSummary: "Summary for example 1."},
+		{ID: "bookmark-2", UserID: "user-1", URL: "https://example2.com", Title: "Example 2", MainImageURL: "https://example2.com/og2.jpg", ContentSummary: "Summary for example 2."},
 	}
 
 	mockRepo := &MockBookmarkRepository{
@@ -955,8 +1022,14 @@ func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
 	if result.Bookmarks[0].MainImageURL != "https://example1.com/og1.jpg" {
 		t.Errorf("GetBookmarksWithPagination() first bookmark MainImageURL = %v, want https://example1.com/og1.jpg", result.Bookmarks[0].MainImageURL)
 	}
+	if result.Bookmarks[0].ContentSummary != "Summary for example 1." {
+		t.Errorf("GetBookmarksWithPagination() first bookmark ContentSummary = %v, want Summary for example 1.", result.Bookmarks[0].ContentSummary)
+	}
 	if result.Bookmarks[1].MainImageURL != "https://example2.com/og2.jpg" {
 		t.Errorf("GetBookmarksWithPagination() second bookmark MainImageURL = %v, want https://example2.com/og2.jpg", result.Bookmarks[1].MainImageURL)
+	}
+	if result.Bookmarks[1].ContentSummary != "Summary for example 2." {
+		t.Errorf("GetBookmarksWithPagination() second bookmark ContentSummary = %v, want Summary for example 2.", result.Bookmarks[1].ContentSummary)
 	}
 	if result.TotalCount != 10 {
 		t.Errorf("GetBookmarksWithPagination() TotalCount = %d, want 10", result.TotalCount)
