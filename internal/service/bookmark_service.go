@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
@@ -35,9 +36,13 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to fetch main image URL for URL %s: %w", b.URL, err)
 	}
-	content, err := s.webRepository.GetContentSummary(b.URL)
-	if err != nil {
-		return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
+	llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
+	var content string
+	if llmSummaryContent == "true" {
+		content, err = s.webRepository.GetContentSummary(b.URL)
+		if err != nil {
+			return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
+		}
 	}
 	b.Title = webTitle
 	b.ContentSummary = content
