@@ -1,3 +1,5 @@
+[![CI/CD Pipeline](https://github.com/tsongpon/athena/actions/workflows/athena.yml/badge.svg)](https://github.com/tsongpon/athena/actions/workflows/athena.yml)
+
 # Athena
 
 A secure bookmark management API server built with Go and Echo framework with JWT authentication.
@@ -1122,7 +1124,7 @@ Configure these secrets in your GitHub repository settings (Settings → Secrets
   - `roles/artifactregistry.writer` - Push Docker images
   - `roles/run.admin` - Deploy to Cloud Run
   - `roles/iam.serviceAccountUser` - Act as service account
-  
+
 - **`GCP_PROJECT_ID`** - Your GCP project ID (e.g., `my-project-123`)
 
 - **`GCP_REGION`** - GCP region for deployment (e.g., `us-central1`, `asia-southeast1`)
