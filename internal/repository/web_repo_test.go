@@ -387,12 +387,12 @@ func TestWebRepository_GetContentSummary_EmptyURL(t *testing.T) {
 func TestWebRepository_GetContentSummary_NoAPIKey(t *testing.T) {
 	repo := NewWebRepository()
 
-	// Ensure OPENAI_API_KEY is not set
-	originalAPIKey := os.Getenv("OPENAI_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
+	// Ensure ANTHROPIC_API_KEY is not set
+	originalAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("ANTHROPIC_API_KEY")
 	defer func() {
 		if originalAPIKey != "" {
-			os.Setenv("OPENAI_API_KEY", originalAPIKey)
+			os.Setenv("ANTHROPIC_API_KEY", originalAPIKey)
 		}
 	}()
 

@@ -39,6 +39,7 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
 	var content string
 	if llmSummaryContent == "true" {
+		logger.Info("LLM cntent summary is enable")
 		content, err = s.webRepository.GetContentSummary(b.URL)
 		if err != nil {
 			return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
@@ -56,7 +57,10 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 		zap.String("id", createdBookmark.ID),
 		zap.String("user_id", createdBookmark.UserID),
 		zap.String("url", createdBookmark.URL),
-		zap.String("title", createdBookmark.Title))
+		zap.String("title", createdBookmark.Title),
+		zap.String("content_summary", createdBookmark.ContentSummary),
+		zap.String("main_image_url", createdBookmark.MainImageURL),
+		zap.Bool("is_archived", createdBookmark.IsArchived))
 
 	return createdBookmark, nil
 }

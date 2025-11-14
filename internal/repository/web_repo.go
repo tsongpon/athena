@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/anthropic"
+	"github.com/tmc/langchaingo/llms/googleai"
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tsongpon/athena/internal/logger"
 	"go.uber.org/zap"
@@ -58,7 +60,7 @@ func (r *WebRepository) GetTitle(url string) (string, error) {
 	return title, nil
 }
 
-// GetContentSummary fetches the HTML content from the given URL and uses LangChain with OpenAI
+// GetContentSummary fetches the HTML content from the given URL and uses LangChain with Anthropic Claude
 // to generate a summary within 500 characters
 func (r *WebRepository) GetContentSummary(url string) (string, error) {
 	if url == "" {
@@ -98,31 +100,55 @@ func (r *WebRepository) GetContentSummary(url string) (string, error) {
 		textContent = textContent[:4000]
 	}
 
-	// Use OpenAI via LangChain to summarize
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		logger.Debug("OPENAI_API_KEY not set, skipping summarization")
-		return "", nil
-	}
-
-	llm, err := openai.New(openai.WithToken(apiKey))
-	if err != nil {
-		logger.Debug("failed to create OpenAI client", zap.Error(err))
+	llmModelName := os.Getenv("LLM_MODEL")
+	var llmModel llms.Model
+	switch llmModelName {
+	case "anthropic":
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			logger.Debug("ANTHROPIC_API_KEY not set, skipping summarization")
+			return "", nil
+		}
+		llmModel, err = anthropic.New(anthropic.WithToken(apiKey))
+		if err != nil {
+			logger.Debug("failed to create Anthropic client", zap.Error(err))
+			return "", nil
+		}
+	case "openai":
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			logger.Debug("OPENAI_API_KEY not set, skipping summarization")
+			return "", nil
+		}
+		llmModel, err = openai.New(openai.WithToken(apiKey))
+		if err != nil {
+			logger.Debug("failed to create OpenAI client", zap.Error(err))
+			return "", nil
+		}
+	case "gemini":
+		ctx := context.Background()
+		apiKey := os.Getenv("GEMINI_API_KEY")
+		if apiKey == "" {
+			logger.Debug("GEMINI_API_KEY not set, skipping summarization")
+			return "", nil
+		}
+		llmModel, err = googleai.New(ctx, googleai.WithAPIKey(apiKey))
+		if err != nil {
+			logger.Debug("failed to create Gemini client", zap.Error(err))
+			return "", nil
+		}
+	default:
+		logger.Debug("unsupported LLM model", zap.String("model", llmModelName))
 		return "", nil
 	}
 
 	ctx := context.Background()
-	prompt := fmt.Sprintf("Summarize the following website content in 500 characters or less. Be concise and capture the main points:\n\n%s", textContent)
+	prompt := fmt.Sprintf("Summarize the following website content in 1000 characters or less. Be concise and capture the main points:\n\n%s", textContent)
 
-	summary, err := llms.GenerateFromSinglePrompt(ctx, llm, prompt)
+	summary, err := llms.GenerateFromSinglePrompt(ctx, llmModel, prompt)
 	if err != nil {
 		logger.Debug("failed to generate summary", zap.String("url", url), zap.Error(err))
 		return "", nil
-	}
-
-	// Trim summary to 500 characters if it exceeds
-	if len(summary) > 500 {
-		summary = summary[:497] + "..."
 	}
 
 	return strings.TrimSpace(summary), nil
