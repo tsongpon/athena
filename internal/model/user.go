@@ -7,6 +7,7 @@ type User struct {
 	Name      string
 	Email     string
 	Password  string
+	Tier      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

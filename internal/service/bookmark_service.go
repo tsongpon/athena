@@ -12,13 +12,15 @@ import (
 // bookmarkService is the concrete implementation of BookmarkService interface
 type BookmarkService struct {
 	bookmarkRepository BookmarkRepository
+	userRepository     UserRepository
 	webRepository      WebRepository
 }
 
 // NewBookmarkService creates a new instance of BookmarkService
-func NewBookmarkService(bookmarkRepo BookmarkRepository, webrepo WebRepository) *BookmarkService {
+func NewBookmarkService(bookmarkRepo BookmarkRepository, userRepo UserRepository, webrepo WebRepository) *BookmarkService {
 	return &BookmarkService{
 		bookmarkRepository: bookmarkRepo,
+		userRepository:     userRepo,
 		webRepository:      webrepo,
 	}
 }
@@ -36,13 +38,19 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to fetch main image URL for URL %s: %w", b.URL, err)
 	}
-	llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
+	user, err := s.userRepository.GetUserByID(b.UserID)
+	if err != nil {
+		return model.Bookmark{}, fmt.Errorf("failed to fetch user for ID %s: %w", b.UserID, err)
+	}
 	var content string
-	if llmSummaryContent == "true" {
-		logger.Info("LLM cntent summary is enable")
-		content, err = s.webRepository.GetContentSummary(b.URL)
-		if err != nil {
-			return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
+	if user.Tier == "paid" {
+		llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
+		if llmSummaryContent == "true" {
+			logger.Info("LLM cntent summary is enable")
+			content, err = s.webRepository.GetContentSummary(b.URL)
+			if err != nil {
+				return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
+			}
 		}
 	}
 	b.Title = webTitle

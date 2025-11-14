@@ -46,6 +46,7 @@ func (s *UserService) CreateUser(user model.User) (model.User, error) {
 		return model.User{}, fmt.Errorf("failed to hash password: %w", err)
 	}
 	user.Password = string(hashedPassword)
+	user.Tier = "free"
 
 	// Create user in repository
 	created, err := s.repo.CreateUser(user)

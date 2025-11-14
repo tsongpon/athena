@@ -137,7 +137,12 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 			return "This is an example website with useful content.", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-1", Tier: "paid"}, nil
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
@@ -184,7 +189,12 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 			return "Summary text", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-1", Tier: "free"}, nil
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
@@ -217,7 +227,13 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 			return "", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			t.Error("GetUserByID() should not be called when GetMainImage fails first")
+			return model.User{}, nil
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
@@ -253,7 +269,12 @@ func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
 			return "", fmt.Errorf("failed to generate content summary")
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-1", Tier: "paid"}, nil
+		},
+	}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
@@ -265,6 +286,225 @@ func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
 	}
 
 	expectedErrorSubstring := "failed to fetch content for URL https://example.com"
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	}
+}
+
+// TestBookmarkService_CreateBookmark_FreeTierNoContentSummary tests that free tier users don't get content summary
+func TestBookmarkService_CreateBookmark_FreeTierNoContentSummary(t *testing.T) {
+	// Set environment variable to enable content summary
+	os.Setenv("LLM_SUMMARY_CONTENT", "true")
+	defer os.Unsetenv("LLM_SUMMARY_CONTENT")
+
+	expectedBookmark := model.Bookmark{
+		ID:             "bookmark-1",
+		UserID:         "user-free",
+		URL:            "https://example.com",
+		Title:          "Example",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: "", // Free tier should not get summary
+		CreatedAt:      time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			if bookmark.ContentSummary != "" {
+				t.Errorf("CreateBookmark() for free tier should have empty ContentSummary, got %v", bookmark.ContentSummary)
+			}
+			return expectedBookmark, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Example", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/og-image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			t.Error("GetContentSummary() should not be called for free tier users")
+			return "", nil
+		},
+	}
+
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-free", Tier: "free"}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-free",
+		URL:    "https://example.com",
+	})
+
+	if err != nil {
+		t.Errorf("CreateBookmark() for free tier unexpected error = %v", err)
+		return
+	}
+
+	if result.ContentSummary != "" {
+		t.Errorf("CreateBookmark() free tier result should have empty ContentSummary, got %v", result.ContentSummary)
+	}
+}
+
+// TestBookmarkService_CreateBookmark_PaidTierWithContentSummary tests that paid tier users get content summary
+func TestBookmarkService_CreateBookmark_PaidTierWithContentSummary(t *testing.T) {
+	// Set environment variable to enable content summary
+	os.Setenv("LLM_SUMMARY_CONTENT", "true")
+	defer os.Unsetenv("LLM_SUMMARY_CONTENT")
+
+	expectedSummary := "This is a paid tier summary."
+	expectedBookmark := model.Bookmark{
+		ID:             "bookmark-1",
+		UserID:         "user-paid",
+		URL:            "https://example.com",
+		Title:          "Example",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: expectedSummary,
+		CreatedAt:      time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			if bookmark.ContentSummary != expectedSummary {
+				t.Errorf("CreateBookmark() for paid tier received ContentSummary = %v, want %v", bookmark.ContentSummary, expectedSummary)
+			}
+			return expectedBookmark, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Example", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/og-image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			return expectedSummary, nil
+		},
+	}
+
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-paid", Tier: "paid"}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-paid",
+		URL:    "https://example.com",
+	})
+
+	if err != nil {
+		t.Errorf("CreateBookmark() for paid tier unexpected error = %v", err)
+		return
+	}
+
+	if result.ContentSummary != expectedSummary {
+		t.Errorf("CreateBookmark() paid tier result ContentSummary = %v, want %v", result.ContentSummary, expectedSummary)
+	}
+}
+
+// TestBookmarkService_CreateBookmark_LLMFeatureDisabled tests that content summary is not generated when LLM feature is disabled
+func TestBookmarkService_CreateBookmark_LLMFeatureDisabled(t *testing.T) {
+	// Ensure LLM_SUMMARY_CONTENT is not set
+	os.Unsetenv("LLM_SUMMARY_CONTENT")
+
+	expectedBookmark := model.Bookmark{
+		ID:             "bookmark-1",
+		UserID:         "user-paid",
+		URL:            "https://example.com",
+		Title:          "Example",
+		MainImageURL:   "https://example.com/og-image.jpg",
+		ContentSummary: "", // Should be empty even for paid tier when feature is disabled
+		CreatedAt:      time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			if bookmark.ContentSummary != "" {
+				t.Errorf("CreateBookmark() with LLM disabled should have empty ContentSummary, got %v", bookmark.ContentSummary)
+			}
+			return expectedBookmark, nil
+		},
+	}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Example", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/og-image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			t.Error("GetContentSummary() should not be called when LLM feature is disabled")
+			return "", nil
+		},
+	}
+
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-paid", Tier: "paid"}, nil
+		},
+	}
+
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
+	result, err := service.CreateBookmark(model.Bookmark{
+		UserID: "user-paid",
+		URL:    "https://example.com",
+	})
+
+	if err != nil {
+		t.Errorf("CreateBookmark() with LLM disabled unexpected error = %v", err)
+		return
+	}
+
+	if result.ContentSummary != "" {
+		t.Errorf("CreateBookmark() with LLM disabled should have empty ContentSummary, got %v", result.ContentSummary)
+	}
+}
+
+// TestBookmarkService_CreateBookmark_GetUserByIDError tests error handling when GetUserByID fails
+func TestBookmarkService_CreateBookmark_GetUserByIDError(t *testing.T) {
+	mockRepo := &MockBookmarkRepository{}
+
+	mockWebRepo := &MockWebRepository{
+		getTitleFunc: func(url string) (string, error) {
+			return "Test Title", nil
+		},
+		getMainImageFunc: func(url string) (string, error) {
+			return "https://example.com/image.jpg", nil
+		},
+		getContentSummaryFunc: func(url string) (string, error) {
+			t.Error("GetContentSummary() should not be called when GetUserByID fails")
+			return "", nil
+		},
+	}
+
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{}, fmt.Errorf("user not found")
+		},
+	}
+
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
+	_, err := service.CreateBookmark(model.Bookmark{
+		UserID: "nonexistent-user",
+		URL:    "https://example.com",
+	})
+
+	if err == nil {
+		t.Error("CreateBookmark() should return error when GetUserByID fails")
+		return
+	}
+
+	expectedErrorSubstring := "failed to fetch user for ID nonexistent-user"
 	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
 		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
 	}
@@ -292,7 +532,8 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 			return "", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "",
@@ -330,7 +571,8 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 			return "Content summary", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "",
 		URL:    "https://example.com",
@@ -365,7 +607,8 @@ func TestBookmarkService_CreateBookmark_NonEmptyID(t *testing.T) {
 			return "", nil
 		},
 	}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.CreateBookmark(model.Bookmark{
 		ID:     "existing-id",
 		UserID: "user-1",
@@ -416,7 +659,8 @@ func TestBookmarkService_ArchiveBookmark(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
@@ -441,7 +685,8 @@ func TestBookmarkService_ArchiveBookmark_BookmarkNotFound(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.ArchiveBookmark("nonexistent")
 
 	if err == nil {
@@ -486,7 +731,8 @@ func TestBookmarkService_ArchiveBookmark_UnauthorizedUser(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
@@ -520,7 +766,8 @@ func TestBookmarkService_ArchiveBookmark_UpdateError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.ArchiveBookmark("bookmark-1")
 
 	if err == nil {
@@ -558,7 +805,8 @@ func TestBookmarkService_ArchiveBookmark_AlreadyArchived(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
@@ -593,7 +841,8 @@ func TestBookmarkService_ArchiveBookmark_EmptyUserID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.ArchiveBookmark("bookmark-1")
 
 	if err != nil {
@@ -618,7 +867,8 @@ func TestBookmarkService_ArchiveBookmark_EmptyBookmarkID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.ArchiveBookmark("")
 
 	if err == nil {
@@ -654,7 +904,8 @@ func TestBookmarkService_GetBookmark(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetBookmark("bookmark-1")
 
 	if err != nil {
@@ -692,7 +943,8 @@ func TestBookmarkService_GetBookmark_EmptyID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetBookmark("")
 
 	if err == nil {
@@ -715,7 +967,8 @@ func TestBookmarkService_GetBookmark_RepositoryError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetBookmark("bookmark-1")
 
 	if err == nil {
@@ -738,7 +991,8 @@ func TestBookmarkService_GetBookmark_NotFound(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetBookmark("nonexistent-id")
 
 	if err == nil {
@@ -785,7 +1039,8 @@ func TestBookmarkService_GetAllBookmarks(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetAllBookmarks("user-1", false)
 
 	if err != nil {
@@ -832,7 +1087,8 @@ func TestBookmarkService_GetAllBookmarks_EmptyUserID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetAllBookmarks("", false)
 
 	if err != nil {
@@ -854,7 +1110,8 @@ func TestBookmarkService_GetAllBookmarks_RepositoryError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetAllBookmarks("user-1", false)
 
 	if err == nil {
@@ -877,7 +1134,8 @@ func TestBookmarkService_GetAllBookmarks_NoBookmarks(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetAllBookmarks("user-1", false)
 
 	if err != nil {
@@ -902,7 +1160,8 @@ func TestBookmarkService_DeleteBookmark(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	err := service.DeleteBookmark("bookmark-1")
 
 	if err != nil {
@@ -920,7 +1179,8 @@ func TestBookmarkService_DeleteBookmark_EmptyID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	err := service.DeleteBookmark("")
 
 	if err == nil {
@@ -943,7 +1203,8 @@ func TestBookmarkService_DeleteBookmark_RepositoryError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	err := service.DeleteBookmark("bookmark-1")
 
 	if err == nil {
@@ -966,7 +1227,8 @@ func TestBookmarkService_DeleteBookmark_NotFound(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	err := service.DeleteBookmark("nonexistent-id")
 
 	if err == nil {
@@ -988,7 +1250,8 @@ func TestNewBookmarkService(t *testing.T) {
 		},
 	}
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 
 	// Verify service is usable by calling a method
 	result, err := service.GetBookmark("test-id")
@@ -1017,7 +1280,8 @@ func TestBookmarkService_GetBookmarksWithPagination(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
 
 	if err != nil {
@@ -1066,7 +1330,8 @@ func TestBookmarkService_GetBookmarksWithPagination_PageValidation(t *testing.T)
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 
 	// Test with page < 1 (should default to 1)
 	result, err := service.GetBookmarksWithPagination("user-1", false, 0, 20)
@@ -1101,7 +1366,8 @@ func TestBookmarkService_GetBookmarksWithPagination_PageSizeValidation(t *testin
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 
 	// Test with pageSize < 1 (should default to 20)
 	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 0)
@@ -1162,7 +1428,8 @@ func TestBookmarkService_GetBookmarksWithPagination_TotalPagesCalculation(t *tes
 			}
 
 			mockWebRepo := &MockWebRepository{}
-			service := NewBookmarkService(mockRepo, mockWebRepo)
+			mockUserRepo := &MockUserRepository{}
+			service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 			result, err := service.GetBookmarksWithPagination("user-1", false, 1, tc.pageSize)
 
 			if err != nil {
@@ -1189,7 +1456,8 @@ func TestBookmarkService_GetBookmarksWithPagination_EmptyResult(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
 
 	if err != nil {
@@ -1217,7 +1485,8 @@ func TestBookmarkService_GetBookmarksWithPagination_ListError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
 
 	if err == nil {
@@ -1243,7 +1512,8 @@ func TestBookmarkService_GetBookmarksWithPagination_CountError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	_, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)
 
 	if err == nil {
@@ -1279,7 +1549,8 @@ func TestBookmarkService_GetBookmarksWithPagination_ArchivedFilter(t *testing.T)
 	}
 
 	mockWebRepo := &MockWebRepository{}
-	service := NewBookmarkService(mockRepo, mockWebRepo)
+	mockUserRepo := &MockUserRepository{}
+	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 
 	// Test with archived = false
 	result, err := service.GetBookmarksWithPagination("user-1", false, 1, 20)

@@ -63,6 +63,11 @@ func TestUserService_CreateUser(t *testing.T) {
 				t.Errorf("CreateUser() stored password is not a valid bcrypt hash: %v", err)
 			}
 
+			// Verify tier is set to "free" by default
+			if user.Tier != "free" {
+				t.Errorf("CreateUser() should set Tier to 'free', got %v", user.Tier)
+			}
+
 			capturedHashedPassword = user.Password
 
 			// Return the user with ID
@@ -87,6 +92,11 @@ func TestUserService_CreateUser(t *testing.T) {
 		t.Errorf("CreateUser() result ID = %v, want user-123", result.ID)
 	}
 
+	// Verify tier is set to "free"
+	if result.Tier != "free" {
+		t.Errorf("CreateUser() result Tier = %v, want free", result.Tier)
+	}
+
 	// Verify password was hashed
 	if result.Password == plainPassword {
 		t.Error("CreateUser() should not return plain text password")
@@ -99,6 +109,42 @@ func TestUserService_CreateUser(t *testing.T) {
 	// Verify the hash starts with bcrypt prefix
 	if !strings.HasPrefix(result.Password, "$2a$") && !strings.HasPrefix(result.Password, "$2b$") {
 		t.Errorf("CreateUser() password doesn't look like bcrypt hash: %s", result.Password)
+	}
+}
+
+// TestUserService_CreateUser_DefaultTierAlwaysFree tests that tier is always set to "free" for new users
+func TestUserService_CreateUser_DefaultTierAlwaysFree(t *testing.T) {
+	plainPassword := "password123"
+
+	mockRepo := &MockUserRepository{
+		createUserFunc: func(user model.User) (model.User, error) {
+			// Verify tier is overridden to "free" even if user tries to set it
+			if user.Tier != "free" {
+				t.Errorf("CreateUser() should override Tier to 'free', got %v", user.Tier)
+			}
+			user.ID = "user-123"
+			return user, nil
+		},
+	}
+
+	service := NewUserService(mockRepo)
+
+	// Try to create user with "paid" tier
+	result, err := service.CreateUser(model.User{
+		Name:     "John Doe",
+		Email:    "john@example.com",
+		Password: plainPassword,
+		Tier:     "paid", // This should be ignored and overridden to "free"
+	})
+
+	if err != nil {
+		t.Errorf("CreateUser() unexpected error = %v", err)
+		return
+	}
+
+	// Verify tier is "free" regardless of what was provided
+	if result.Tier != "free" {
+		t.Errorf("CreateUser() result Tier = %v, want free (should ignore user-provided tier)", result.Tier)
 	}
 }
 

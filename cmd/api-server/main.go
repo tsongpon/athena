@@ -83,7 +83,7 @@ func main() {
 	}
 
 	webRepo := repository.NewWebRepository()
-	bookmarkService := service.NewBookmarkService(bookmarkRepo, webRepo)
+	bookmarkService := service.NewBookmarkService(bookmarkRepo, userRepo, webRepo)
 	userService := service.NewUserService(userRepo)
 
 	bookmarkHandler := handler.NewBookmarkHandler(bookmarkService)
