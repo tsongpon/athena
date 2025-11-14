@@ -124,16 +124,7 @@ jobs:
             --region=${{ secrets.GCP_REGION }} \
             --allow-unauthenticated \
             --port=1323 \
-            --set-env-vars=\
-            "JWT_SECRET=${{ secrets.JWT_SECRET }}\
-            ,GCP_FIRESTORE_DATABASE_ID=athena\
-            ,STORAGE_TYPE=firestore\
-            ,LLM_SUMMARY_CONTENT=${{ vars.LLM_SUMMARY_CONTENT }}
-            ,LLM_MODEL=${{ vars.LLM_MODEL }}\
-            ,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}\
-            ,ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}\
-            ,GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}\
-            ,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
+            --set-env-vars="JWT_SECRET=${{ secrets.JWT_SECRET }},GCP_FIRESTORE_DATABASE_ID=athena,STORAGE_TYPE=firestore,LLM_SUMMARY_CONTENT=${{ vars.LLM_SUMMARY_CONTENT }},LLM_MODEL=${{ vars.LLM_MODEL }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
             --max-instances=10 \
             --min-instances=0 \
             --memory=512Mi \
