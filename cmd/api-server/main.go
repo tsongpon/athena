@@ -9,7 +9,6 @@ import (
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/tsongpon/athena/internal/database"
 	"github.com/tsongpon/athena/internal/handler"
 	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/repository"
@@ -36,27 +35,6 @@ func main() {
 	var userRepo service.UserRepository
 
 	switch storageType {
-	case "postgres":
-		// PostgreSQL configuration from environment variables
-		dbConfig := database.PostgresConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "5432"),
-			User:     getEnv("DB_USER", "postgres"),
-			Password: getEnv("DB_PASSWORD", ""),
-			DBName:   getEnv("DB_NAME", "athena"),
-			SSLMode:  getEnv("DB_SSLMODE", "disable"),
-		}
-
-		db, err := database.NewPostgresConnection(dbConfig)
-		if err != nil {
-			logger.Fatal("Failed to connect to PostgreSQL", zap.Error(err))
-		}
-		defer db.Close()
-
-		bookmarkRepo = repository.NewBookmarkPostgresRepository(db)
-		userRepo = repository.NewUserPostgresRepository(db)
-		logger.Info("Using PostgreSQL storage for bookmarks and users")
-
 	case "firestore":
 		// Firestore configuration from environment variables
 		ctx := context.Background()

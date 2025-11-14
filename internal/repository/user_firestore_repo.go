@@ -35,6 +35,7 @@ type firestoreUser struct {
 	Name      string    `firestore:"name"`
 	Email     string    `firestore:"email"`
 	Password  string    `firestore:"password"`
+	Tier      string    `firestore:"tier"`
 	CreatedAt time.Time `firestore:"created_at"`
 	UpdatedAt time.Time `firestore:"updated_at"`
 }
@@ -46,6 +47,7 @@ func toFirestoreUser(user model.User) firestoreUser {
 		Name:      user.Name,
 		Email:     user.Email,
 		Password:  user.Password,
+		Tier:      user.Tier,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
@@ -58,6 +60,7 @@ func toModelUser(fsUser firestoreUser) model.User {
 		Name:      fsUser.Name,
 		Email:     fsUser.Email,
 		Password:  fsUser.Password,
+		Tier:      fsUser.Tier,
 		CreatedAt: fsUser.CreatedAt,
 		UpdatedAt: fsUser.UpdatedAt,
 	}
