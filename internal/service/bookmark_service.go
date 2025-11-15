@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
@@ -29,33 +30,47 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if b.ID != "" {
 		return model.Bookmark{}, fmt.Errorf("bookmark ID must be empty")
 	}
+	var wg sync.WaitGroup
+	var title string
+	var imageURL string
 
-	webTitle, err := s.webRepository.GetTitle(b.URL)
-	if err != nil {
-		return model.Bookmark{}, fmt.Errorf("failed to fetch title for URL %s: %w", b.URL, err)
-	}
-	mainImageURL, err := s.webRepository.GetMainImage(b.URL)
-	if err != nil {
-		return model.Bookmark{}, fmt.Errorf("failed to fetch main image URL for URL %s: %w", b.URL, err)
-	}
+	wg.Go(func() {
+		var e error
+		title, e = s.webRepository.GetTitle(b.URL)
+		if e != nil {
+			logger.Error("failed to fetch title for URL", zap.String("url", b.URL), zap.Error(e))
+		}
+	})
+
+	wg.Go(func() {
+		var e error
+		imageURL, e = s.webRepository.GetMainImage(b.URL)
+		if e != nil {
+			logger.Error("failed to fetch main image URL for URL", zap.String("url", b.URL), zap.Error(e))
+		}
+	})
+
+	var content string
 	user, err := s.userRepository.GetUserByID(b.UserID)
 	if err != nil {
 		return model.Bookmark{}, fmt.Errorf("failed to fetch user for ID %s: %w", b.UserID, err)
 	}
-	var content string
 	if user.Tier == "paid" {
 		llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
 		if llmSummaryContent == "true" {
-			logger.Info("LLM cntent summary is enable")
-			content, err = s.webRepository.GetContentSummary(b.URL)
-			if err != nil {
-				return model.Bookmark{}, fmt.Errorf("failed to fetch content for URL %s: %w", b.URL, err)
-			}
+			wg.Go(func() {
+				logger.Info("LLM content summary is enabled")
+				content, err = s.webRepository.GetContentSummary(b.URL)
+				if err != nil {
+					logger.Error("failed to fetch content summary for URL", zap.String("url", b.URL), zap.Error(err))
+				}
+			})
 		}
 	}
-	b.Title = webTitle
+	wg.Wait()
+	b.Title = title
 	b.ContentSummary = content
-	b.MainImageURL = mainImageURL
+	b.MainImageURL = imageURL
 	b.IsArchived = false
 	createdBookmark, err := s.bookmarkRepository.CreateBookmark(b)
 	if err != nil {

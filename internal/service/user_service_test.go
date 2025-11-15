@@ -9,42 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// MockUserRepository is a mock implementation of UserRepository for testing
-type MockUserRepository struct {
-	createUserFunc                func(user model.User) (model.User, error)
-	getUserByIDFunc               func(id string) (model.User, error)
-	getUserByEmailFunc            func(email string) (model.User, error)
-	getUserByEmailAndPasswordFunc func(email, hashedPassword string) (model.User, error)
-}
-
-func (m *MockUserRepository) CreateUser(user model.User) (model.User, error) {
-	if m.createUserFunc != nil {
-		return m.createUserFunc(user)
-	}
-	return model.User{}, nil
-}
-
-func (m *MockUserRepository) GetUserByID(id string) (model.User, error) {
-	if m.getUserByIDFunc != nil {
-		return m.getUserByIDFunc(id)
-	}
-	return model.User{}, nil
-}
-
-func (m *MockUserRepository) GetUserByEmail(email string) (model.User, error) {
-	if m.getUserByEmailFunc != nil {
-		return m.getUserByEmailFunc(email)
-	}
-	return model.User{}, nil
-}
-
-func (m *MockUserRepository) GetUserByEmailAndPassword(email, hashedPassword string) (model.User, error) {
-	if m.getUserByEmailAndPasswordFunc != nil {
-		return m.getUserByEmailAndPasswordFunc(email, hashedPassword)
-	}
-	return model.User{}, nil
-}
-
 // TestUserService_CreateUser tests successful user creation with password hashing
 func TestUserService_CreateUser(t *testing.T) {
 	plainPassword := "myPlainPassword123"

@@ -26,6 +26,14 @@ type MockWebRepository struct {
 	getContentSummaryFunc func(url string) (string, error)
 }
 
+// MockUserRepository is a mock implementation of UserRepository for testing
+type MockUserRepository struct {
+	createUserFunc                func(user model.User) (model.User, error)
+	getUserByIDFunc               func(id string) (model.User, error)
+	getUserByEmailFunc            func(email string) (model.User, error)
+	getUserByEmailAndPasswordFunc func(email, hashedPassword string) (model.User, error)
+}
+
 func (m *MockBookmarkRepository) CreateBookmark(bookmark model.Bookmark) (model.Bookmark, error) {
 	if m.createBookmarkFunc != nil {
 		return m.createBookmarkFunc(bookmark)
@@ -89,6 +97,34 @@ func (m *MockWebRepository) GetContentSummary(url string) (string, error) {
 	return "", nil
 }
 
+func (m *MockUserRepository) CreateUser(user model.User) (model.User, error) {
+	if m.createUserFunc != nil {
+		return m.createUserFunc(user)
+	}
+	return model.User{}, nil
+}
+
+func (m *MockUserRepository) GetUserByID(id string) (model.User, error) {
+	if m.getUserByIDFunc != nil {
+		return m.getUserByIDFunc(id)
+	}
+	return model.User{}, nil
+}
+
+func (m *MockUserRepository) GetUserByEmail(email string) (model.User, error) {
+	if m.getUserByEmailFunc != nil {
+		return m.getUserByEmailFunc(email)
+	}
+	return model.User{}, nil
+}
+
+func (m *MockUserRepository) GetUserByEmailAndPassword(email, hashedPassword string) (model.User, error) {
+	if m.getUserByEmailAndPasswordFunc != nil {
+		return m.getUserByEmailAndPasswordFunc(email, hashedPassword)
+	}
+	return model.User{}, nil
+}
+
 // TestBookmarkService_CreateBookmark tests successful bookmark creation
 func TestBookmarkService_CreateBookmark(t *testing.T) {
 	// Set environment variable to enable content summary
@@ -121,6 +157,9 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 			}
 			if bookmark.ContentSummary != "This is an example website with useful content." {
 				t.Errorf("CreateBookmark() received ContentSummary = %v, want This is an example website with useful content.", bookmark.ContentSummary)
+			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() received IsArchived = %v, want false", bookmark.IsArchived)
 			}
 			return expectedBookmark, nil
 		},
@@ -211,9 +250,30 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 	}
 }
 
-// TestBookmarkService_CreateBookmark_GetMainImageError tests error handling when GetMainImage fails
+// TestBookmarkService_CreateBookmark_GetMainImageError tests that GetMainImage errors are logged but don't fail the operation
 func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
-	mockRepo := &MockBookmarkRepository{}
+	expectedBookmark := model.Bookmark{
+		ID:             "bookmark-1",
+		UserID:         "user-1",
+		URL:            "https://example.com",
+		Title:          "Test Title",
+		MainImageURL:   "",
+		ContentSummary: "",
+		IsArchived:     false,
+		CreatedAt:      time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			if bookmark.MainImageURL != "" {
+				t.Errorf("CreateBookmark() should have empty MainImageURL when GetMainImage fails, got %v", bookmark.MainImageURL)
+			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
+			}
+			return expectedBookmark, nil
+		},
+	}
 
 	mockWebRepo := &MockWebRepository{
 		getTitleFunc: func(url string) (string, error) {
@@ -222,41 +282,56 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 		getMainImageFunc: func(url string) (string, error) {
 			return "", fmt.Errorf("failed to fetch og:image")
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
-			t.Error("GetContentSummary() should not be called when GetMainImage fails first")
-			return "", nil
-		},
 	}
 	mockUserRepo := &MockUserRepository{
 		getUserByIDFunc: func(id string) (model.User, error) {
-			t.Error("GetUserByID() should not be called when GetMainImage fails first")
-			return model.User{}, nil
+			return model.User{ID: "user-1", Tier: "free"}, nil
 		},
 	}
 	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
-	_, err := service.CreateBookmark(model.Bookmark{
+	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
 	})
 
-	if err == nil {
-		t.Error("CreateBookmark() should return error when GetMainImage fails")
+	if err != nil {
+		t.Errorf("CreateBookmark() should not fail when GetMainImage fails, got error: %v", err)
 		return
 	}
 
-	expectedErrorSubstring := "failed to fetch main image URL for URL https://example.com"
-	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
-		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	if result.MainImageURL != "" {
+		t.Errorf("CreateBookmark() MainImageURL should be empty when GetMainImage fails, got %v", result.MainImageURL)
 	}
 }
 
-// TestBookmarkService_CreateBookmark_GetContentSummaryError tests error handling when GetContentSummary fails
+// TestBookmarkService_CreateBookmark_GetContentSummaryError tests that GetContentSummary errors are logged but don't fail the operation
 func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
 	// Set environment variable to enable content summary
 	os.Setenv("LLM_SUMMARY_CONTENT", "true")
 	defer os.Unsetenv("LLM_SUMMARY_CONTENT")
 
-	mockRepo := &MockBookmarkRepository{}
+	expectedBookmark := model.Bookmark{
+		ID:             "bookmark-1",
+		UserID:         "user-1",
+		URL:            "https://example.com",
+		Title:          "Test Title",
+		MainImageURL:   "https://example.com/image.jpg",
+		ContentSummary: "",
+		IsArchived:     false,
+		CreatedAt:      time.Now(),
+	}
+
+	mockRepo := &MockBookmarkRepository{
+		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
+			if bookmark.ContentSummary != "" {
+				t.Errorf("CreateBookmark() should have empty ContentSummary when GetContentSummary fails, got %v", bookmark.ContentSummary)
+			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
+			}
+			return expectedBookmark, nil
+		},
+	}
 
 	mockWebRepo := &MockWebRepository{
 		getTitleFunc: func(url string) (string, error) {
@@ -275,19 +350,18 @@ func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
 		},
 	}
 	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
-	_, err := service.CreateBookmark(model.Bookmark{
+	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
 		URL:    "https://example.com",
 	})
 
-	if err == nil {
-		t.Error("CreateBookmark() should return error when GetContentSummary fails")
+	if err != nil {
+		t.Errorf("CreateBookmark() should not fail when GetContentSummary fails, got error: %v", err)
 		return
 	}
 
-	expectedErrorSubstring := "failed to fetch content for URL https://example.com"
-	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
-		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
+	if result.ContentSummary != "" {
+		t.Errorf("CreateBookmark() ContentSummary should be empty when GetContentSummary fails, got %v", result.ContentSummary)
 	}
 }
 
@@ -311,6 +385,9 @@ func TestBookmarkService_CreateBookmark_FreeTierNoContentSummary(t *testing.T) {
 		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
 			if bookmark.ContentSummary != "" {
 				t.Errorf("CreateBookmark() for free tier should have empty ContentSummary, got %v", bookmark.ContentSummary)
+			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
 			}
 			return expectedBookmark, nil
 		},
@@ -373,6 +450,9 @@ func TestBookmarkService_CreateBookmark_PaidTierWithContentSummary(t *testing.T)
 			if bookmark.ContentSummary != expectedSummary {
 				t.Errorf("CreateBookmark() for paid tier received ContentSummary = %v, want %v", bookmark.ContentSummary, expectedSummary)
 			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
+			}
 			return expectedBookmark, nil
 		},
 	}
@@ -430,6 +510,9 @@ func TestBookmarkService_CreateBookmark_LLMFeatureDisabled(t *testing.T) {
 		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
 			if bookmark.ContentSummary != "" {
 				t.Errorf("CreateBookmark() with LLM disabled should have empty ContentSummary, got %v", bookmark.ContentSummary)
+			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
 			}
 			return expectedBookmark, nil
 		},
@@ -517,6 +600,9 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 			if bookmark.URL != "" {
 				t.Errorf("CreateBookmark() should pass empty URL to repository")
 			}
+			if bookmark.IsArchived != false {
+				t.Errorf("CreateBookmark() should set IsArchived to false, got %v", bookmark.IsArchived)
+			}
 			return bookmark, nil
 		},
 	}
@@ -528,11 +614,12 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 		getMainImageFunc: func(url string) (string, error) {
 			return "", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
-			return "", nil
+	}
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{ID: "user-1", Tier: "free"}, nil
 		},
 	}
-	mockUserRepo := &MockUserRepository{}
 	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
 	result, err := service.CreateBookmark(model.Bookmark{
 		UserID: "user-1",
@@ -547,15 +634,16 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 	if result.URL != "" {
 		t.Errorf("CreateBookmark() result URL = %v, want empty string", result.URL)
 	}
+	if result.IsArchived != false {
+		t.Errorf("CreateBookmark() result IsArchived = %v, want false", result.IsArchived)
+	}
 }
 
-// TestBookmarkService_CreateBookmark_EmptyUserID tests creating bookmark with empty userID
+// TestBookmarkService_CreateBookmark_EmptyUserID tests creating bookmark with empty userID should fail
 func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{
 		createBookmarkFunc: func(bookmark model.Bookmark) (model.Bookmark, error) {
-			if bookmark.UserID != "" {
-				t.Errorf("CreateBookmark() should pass empty UserID to repository")
-			}
+			t.Error("CreateBookmark() should not be called when UserID is empty")
 			return bookmark, nil
 		},
 	}
@@ -567,24 +655,26 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 		getMainImageFunc: func(url string) (string, error) {
 			return "https://example.com/image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
-			return "Content summary", nil
+	}
+	mockUserRepo := &MockUserRepository{
+		getUserByIDFunc: func(id string) (model.User, error) {
+			return model.User{}, fmt.Errorf("user not found")
 		},
 	}
-	mockUserRepo := &MockUserRepository{}
 	service := NewBookmarkService(mockRepo, mockUserRepo, mockWebRepo)
-	result, err := service.CreateBookmark(model.Bookmark{
+	_, err := service.CreateBookmark(model.Bookmark{
 		UserID: "",
 		URL:    "https://example.com",
 	})
 
-	if err != nil {
-		t.Errorf("CreateBookmark() with empty UserID unexpected error = %v", err)
+	if err == nil {
+		t.Error("CreateBookmark() with empty UserID should return error")
 		return
 	}
 
-	if result.UserID != "" {
-		t.Errorf("CreateBookmark() result UserID = %v, want empty string", result.UserID)
+	expectedErrorSubstring := "failed to fetch user for ID "
+	if len(err.Error()) < len(expectedErrorSubstring) || err.Error()[:len(expectedErrorSubstring)] != expectedErrorSubstring {
+		t.Errorf("CreateBookmark() error should contain '%s', got %v", expectedErrorSubstring, err.Error())
 	}
 }
 
