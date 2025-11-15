@@ -269,7 +269,7 @@ Authorization: Bearer <your-jwt-token>
       "created_at": "2025-11-15T10:30:45.123Z"
     }
     ```
-  - Note: 
+  - Note:
     - `user_id` is automatically extracted from the JWT token
     - Metadata (title, image, summary) is fetched automatically and concurrently
     - `content_summary` is only populated for paid tier users
@@ -439,7 +439,6 @@ curl -X DELETE http://localhost:1323/bookmarks/BOOKMARK_ID \
 
 ### Environment Variables
 - `JWT_SECRET`: Secret key for signing JWT tokens
-  - Default: `your-secret-key-change-this-in-production` (⚠️ **MUST CHANGE IN PRODUCTION!**)
   - Recommended: Use a strong random string (at least 32 characters)
   - Example: `export JWT_SECRET="$(openssl rand -base64 32)"`
 
@@ -651,23 +650,6 @@ docker inspect --format='{{json .State.Health}}' athena-api | jq
 ```
 
 Health check endpoint: `GET /ping`
-- Interval: 30 seconds
-- Timeout: 3 seconds
-- Retries: 3
-- Start period: 5 seconds
-
-### Multi-stage Build
-
-The Dockerfile uses a multi-stage build for optimal image size:
-
-1. **Builder stage**: Uses `golang:1.25.1-alpine` to compile the binary
-2. **Runtime stage**: Uses `alpine:latest` with only the compiled binary
-
-Benefits:
-- Small image size (~20MB vs ~800MB with full Go image)
-- No Go toolchain in final image (security)
-- Static binary with no external dependencies
-- Runs as non-root user for security
 
 ## Testing
 
@@ -716,21 +698,6 @@ go test -v -run TestBookmarkHandler_CreateBookmark ./internal/handler/
 # Web repository tests
 go test -v -run TestWebRepository ./internal/repository/
 ```
-
-### Test Coverage Breakdown
-- **Handler Layer**: 95.9% (65 tests total)
-  - `auth.go`: Covered by 14 tests
-  - `bookmark.go`: Covered by 38 tests
-  - `jwt_helper.go`: Covered by handler tests
-  - Other tests: 13 tests (marshaling, benchmarks, helpers)
-- **Repository Layer**: 100.0%
-  - `bookmark_inmem_repo.go`: Full coverage
-  - `user_inmem_repo.go`: Full coverage
-  - `web_repo.go`: Covered by integration tests
-- **Service Layer**: 98.4%
-  - `bookmark_service.go`: Nearly complete coverage
-  - `user_service.go`: Nearly complete coverage
-- **Overall**: ~89%
 
 ## Architecture
 
@@ -825,26 +792,6 @@ HTTP Request
 - **Interface Segregation**: Small, focused interfaces (BookmarkRepository, UserRepository, WebRepository)
 - **Middleware Pattern**: JWT authentication, CORS, logging, recovery
 - **Concurrent Processing**: Goroutines for parallel metadata fetching
-- **Helper Functions**: Reusable JWT claim extraction logic (`getAuthenticatedUser`)
-
-### Security Architecture
-
-- **Stateless Authentication**: JWT tokens contain all necessary user information
-- **Authorization at Handler Level**: Each protected endpoint verifies user ownership
-- **Secure Password Storage**: bcrypt hashing with salt (never store plaintext)
-- **Defense in Depth**: Multiple layers of validation (handler, service, repository)
-
-### Key Design Decisions
-
-1. **JWT in Context**: Echo JWT middleware v4 stores `*jwt.Token` in context. The `getAuthenticatedUser` helper extracts claims safely.
-
-2. **User ID from JWT**: User ID is never accepted from request parameters for protected endpoints, always extracted from authenticated token.
-
-3. **Authorization at Handler**: Authorization checks happen at the handler layer before calling services.
-
-4. **Concurrent Metadata Fetching**: Title, image, and LLM summary are fetched concurrently using goroutines for optimal performance.
-
-5. **Graceful Degradation**: If metadata fetching fails, bookmarks are still created with the URL.
 
 ## CI/CD Pipeline
 
@@ -952,56 +899,6 @@ Error response format:
 - [ ] Import/export bookmarks (HTML, JSON)
 - [ ] Bookmark duplicate detection
 - [ ] Browser extension integration
-
-## Known Limitations
-
-- **In-memory storage**: Data is lost when server restarts (use Firestore for production persistence)
-- **No PostgreSQL support**: PostgreSQL repository implementation not yet available
-- **No refresh tokens**: Users must re-login after 24 hours
-- **No password complexity requirements**: Consider adding validation
-- **No rate limiting**: Vulnerable to brute force attacks
-- **Default JWT secret**: Must be changed in production
-- **No email verification**: Anyone can register with any email
-- **LLM cost**: Content summarization may incur API costs for paid users
-
-## Production Deployment Checklist
-
-Before deploying to production:
-
-### Security
-- [ ] Set a strong `JWT_SECRET` environment variable (min 32 characters)
-- [ ] Add password complexity requirements
-- [ ] Implement rate limiting (per IP/user)
-- [ ] Review and harden CORS settings
-- [ ] Add input sanitization
-- [ ] Configure proper error handling (don't leak stack traces)
-- [ ] Enable HTTPS/TLS (handled by Cloud Run)
-- [ ] Implement refresh token mechanism
-- [ ] Add email verification
-
-### Infrastructure
-- [x] Replace in-memory repositories with persistent storage (Firestore)
-- [x] Set up CI/CD pipeline (GitHub Actions)
-- [ ] Configure GCP service account with minimal permissions
-- [ ] Set up automated database backups
-- [ ] Configure database connection pooling
-- [ ] Set up monitoring and alerts (Cloud Monitoring)
-- [ ] Add logging to external service (Cloud Logging)
-- [ ] Configure firewall rules and VPC if needed
-- [ ] Set up rate limiting and CDN (Cloud Armor, Cloud CDN)
-
-### LLM Features
-- [ ] Monitor LLM API costs and set budget alerts
-- [ ] Implement caching for duplicate content summaries
-- [ ] Add retry logic with exponential backoff for LLM calls
-- [ ] Set up fallback if LLM provider is down
-
-### GitHub Actions Setup
-- [ ] Add all required GitHub secrets (GCP_SA_KEY, GCP_PROJECT_ID, etc.)
-- [ ] Create GCP Artifact Registry repository
-- [ ] Set up GCP service account with proper IAM roles
-- [ ] Test deployment pipeline on staging branch first
-- [ ] Configure branch protection rules for main branch
 
 ## License
 
