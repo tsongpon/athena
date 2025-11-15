@@ -31,7 +31,7 @@ func NewWebRepository() *WebRepository {
 }
 
 // GetTitle fetches the HTML content from the given URL and extracts the title
-func (r *WebRepository) GetTitle(url string) (string, error) {
+func (r *WebRepository) GetTitle(ctx context.Context, url string) (string, error) {
 	if url == "" {
 		return "", fmt.Errorf("URL cannot be empty")
 	}
@@ -62,7 +62,7 @@ func (r *WebRepository) GetTitle(url string) (string, error) {
 
 // GetContentSummary fetches the HTML content from the given URL and uses LangChain with Anthropic Claude
 // to generate a summary within 500 characters
-func (r *WebRepository) GetContentSummary(url string) (string, error) {
+func (r *WebRepository) GetContentSummary(ctx context.Context, url string) (string, error) {
 	if url == "" {
 		return "", fmt.Errorf("URL cannot be empty")
 	}
@@ -142,7 +142,7 @@ func (r *WebRepository) GetContentSummary(url string) (string, error) {
 		return "", nil
 	}
 
-	ctx := context.Background()
+	// ctx := context.Background()
 	prompt := fmt.Sprintf("Summarize the following website content in 1000 characters or less. Be concise and capture the main points:\n\n%s", textContent)
 
 	summary, err := llms.GenerateFromSinglePrompt(ctx, llmModel, prompt)
@@ -187,7 +187,7 @@ func extractTextContent(htmlContent string) string {
 }
 
 // GetMainImage fetches the HTML content from the given URL and extracts the OpenGraph image URL
-func (r *WebRepository) GetMainImage(url string) (string, error) {
+func (r *WebRepository) GetMainImage(ctx context.Context, url string) (string, error) {
 	if url == "" {
 		return "", fmt.Errorf("URL cannot be empty")
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -21,9 +22,9 @@ type MockBookmarkRepository struct {
 
 // MockWebRepository is a mock implementation of WebRepository for testing
 type MockWebRepository struct {
-	getTitleFunc          func(url string) (string, error)
-	getMainImageFunc      func(url string) (string, error)
-	getContentSummaryFunc func(url string) (string, error)
+	getTitleFunc          func(ctx context.Context, url string) (string, error)
+	getMainImageFunc      func(ctx context.Context, url string) (string, error)
+	getContentSummaryFunc func(ctx context.Context, url string) (string, error)
 }
 
 // MockUserRepository is a mock implementation of UserRepository for testing
@@ -76,23 +77,23 @@ func (m *MockBookmarkRepository) DeleteBookmark(id string) error {
 	return nil
 }
 
-func (m *MockWebRepository) GetTitle(url string) (string, error) {
+func (m *MockWebRepository) GetTitle(ctx context.Context, url string) (string, error) {
 	if m.getTitleFunc != nil {
-		return m.getTitleFunc(url)
+		return m.getTitleFunc(ctx, url)
 	}
 	return "Default Title", nil
 }
 
-func (m *MockWebRepository) GetMainImage(url string) (string, error) {
+func (m *MockWebRepository) GetMainImage(ctx context.Context, url string) (string, error) {
 	if m.getMainImageFunc != nil {
-		return m.getMainImageFunc(url)
+		return m.getMainImageFunc(ctx, url)
 	}
 	return "", nil
 }
 
-func (m *MockWebRepository) GetContentSummary(url string) (string, error) {
+func (m *MockWebRepository) GetContentSummary(ctx context.Context, url string) (string, error) {
 	if m.getContentSummaryFunc != nil {
-		return m.getContentSummaryFunc(url)
+		return m.getContentSummaryFunc(ctx, url)
 	}
 	return "", nil
 }
@@ -166,13 +167,13 @@ func TestBookmarkService_CreateBookmark(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Example", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/og-image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			return "This is an example website with useful content.", nil
 		},
 	}
@@ -218,13 +219,13 @@ func TestBookmarkService_CreateBookmark_RepositoryError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Test Title", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			return "Summary text", nil
 		},
 	}
@@ -276,10 +277,10 @@ func TestBookmarkService_CreateBookmark_GetMainImageError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Test Title", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "", fmt.Errorf("failed to fetch og:image")
 		},
 	}
@@ -334,13 +335,13 @@ func TestBookmarkService_CreateBookmark_GetContentSummaryError(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Test Title", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			return "", fmt.Errorf("failed to generate content summary")
 		},
 	}
@@ -394,13 +395,13 @@ func TestBookmarkService_CreateBookmark_FreeTierNoContentSummary(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Example", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/og-image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			t.Error("GetContentSummary() should not be called for free tier users")
 			return "", nil
 		},
@@ -458,13 +459,13 @@ func TestBookmarkService_CreateBookmark_PaidTierWithContentSummary(t *testing.T)
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Example", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/og-image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			return expectedSummary, nil
 		},
 	}
@@ -519,13 +520,13 @@ func TestBookmarkService_CreateBookmark_LLMFeatureDisabled(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Example", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/og-image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			t.Error("GetContentSummary() should not be called when LLM feature is disabled")
 			return "", nil
 		},
@@ -558,13 +559,13 @@ func TestBookmarkService_CreateBookmark_GetUserByIDError(t *testing.T) {
 	mockRepo := &MockBookmarkRepository{}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Test Title", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/image.jpg", nil
 		},
-		getContentSummaryFunc: func(url string) (string, error) {
+		getContentSummaryFunc: func(ctx context.Context, url string) (string, error) {
 			t.Error("GetContentSummary() should not be called when GetUserByID fails")
 			return "", nil
 		},
@@ -608,10 +609,10 @@ func TestBookmarkService_CreateBookmark_EmptyURL(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "", nil
 		},
 	}
@@ -649,10 +650,10 @@ func TestBookmarkService_CreateBookmark_EmptyUserID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			return "Title", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			return "https://example.com/image.jpg", nil
 		},
 	}
@@ -688,11 +689,11 @@ func TestBookmarkService_CreateBookmark_NonEmptyID(t *testing.T) {
 	}
 
 	mockWebRepo := &MockWebRepository{
-		getTitleFunc: func(url string) (string, error) {
+		getTitleFunc: func(ctx context.Context, url string) (string, error) {
 			t.Error("GetTitle() should not be called when ID validation fails")
 			return "", nil
 		},
-		getMainImageFunc: func(url string) (string, error) {
+		getMainImageFunc: func(ctx context.Context, url string) (string, error) {
 			t.Error("GetMainImage() should not be called when ID validation fails")
 			return "", nil
 		},

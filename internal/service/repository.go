@@ -1,6 +1,10 @@
 package service
 
-import "github.com/tsongpon/athena/internal/model"
+import (
+	"context"
+
+	"github.com/tsongpon/athena/internal/model"
+)
 
 type UserRepository interface {
 	CreateUser(user model.User) (model.User, error)
@@ -19,7 +23,7 @@ type BookmarkRepository interface {
 }
 
 type WebRepository interface {
-	GetTitle(url string) (string, error)
-	GetMainImage(url string) (string, error)
-	GetContentSummary(url string) (string, error)
+	GetTitle(ctx context.Context, url string) (string, error)
+	GetMainImage(ctx context.Context, url string) (string, error)
+	GetContentSummary(ctx context.Context, url string) (string, error)
 }

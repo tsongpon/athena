@@ -1,9 +1,11 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/tsongpon/athena/internal/logger"
 	"github.com/tsongpon/athena/internal/model"
@@ -15,6 +17,7 @@ type BookmarkService struct {
 	bookmarkRepository BookmarkRepository
 	userRepository     UserRepository
 	webRepository      WebRepository
+	llmSummaryContent  string
 }
 
 // NewBookmarkService creates a new instance of BookmarkService
@@ -23,6 +26,7 @@ func NewBookmarkService(bookmarkRepo BookmarkRepository, userRepo UserRepository
 		bookmarkRepository: bookmarkRepo,
 		userRepository:     userRepo,
 		webRepository:      webrepo,
+		llmSummaryContent:  os.Getenv("LLM_SUMMARY_CONTENT"),
 	}
 }
 
@@ -30,23 +34,26 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	if b.ID != "" {
 		return model.Bookmark{}, fmt.Errorf("bookmark ID must be empty")
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var wg sync.WaitGroup
 	var title string
-	var imageURL string
+	var MainImageURL string
 
 	wg.Go(func() {
 		var e error
-		title, e = s.webRepository.GetTitle(b.URL)
+		title, e = s.webRepository.GetTitle(ctx, b.URL)
 		if e != nil {
-			logger.Error("failed to fetch title for URL", zap.String("url", b.URL), zap.Error(e))
+			logger.Warn("failed to fetch title for URL", zap.String("url", b.URL), zap.Error(e))
 		}
 	})
 
 	wg.Go(func() {
 		var e error
-		imageURL, e = s.webRepository.GetMainImage(b.URL)
+		MainImageURL, e = s.webRepository.GetMainImage(ctx, b.URL)
 		if e != nil {
-			logger.Error("failed to fetch main image URL for URL", zap.String("url", b.URL), zap.Error(e))
+			logger.Warn("failed to fetch main image URL for URL", zap.String("url", b.URL), zap.Error(e))
 		}
 	})
 
@@ -56,13 +63,13 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 		return model.Bookmark{}, fmt.Errorf("failed to fetch user for ID %s: %w", b.UserID, err)
 	}
 	if user.Tier == "paid" {
-		llmSummaryContent := os.Getenv("LLM_SUMMARY_CONTENT")
-		if llmSummaryContent == "true" {
+		if s.llmSummaryContent == "true" {
+			logger.Info("LLM content summary is enabled")
 			wg.Go(func() {
-				logger.Info("LLM content summary is enabled")
-				content, err = s.webRepository.GetContentSummary(b.URL)
-				if err != nil {
-					logger.Error("failed to fetch content summary for URL", zap.String("url", b.URL), zap.Error(err))
+				var e error
+				content, e = s.webRepository.GetContentSummary(ctx, b.URL)
+				if e != nil {
+					logger.Warn("failed to fetch content summary for URL", zap.String("url", b.URL), zap.Error(e))
 				}
 			})
 		}
@@ -70,7 +77,7 @@ func (s *BookmarkService) CreateBookmark(b model.Bookmark) (model.Bookmark, erro
 	wg.Wait()
 	b.Title = title
 	b.ContentSummary = content
-	b.MainImageURL = imageURL
+	b.MainImageURL = MainImageURL
 	b.IsArchived = false
 	createdBookmark, err := s.bookmarkRepository.CreateBookmark(b)
 	if err != nil {

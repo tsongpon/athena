@@ -2,40 +2,42 @@
 
 # Athena
 
-A secure bookmark management API server built with Go and Echo framework with JWT authentication.
+A secure bookmark management API server built with Go and Echo framework with JWT authentication, automatic web metadata extraction, and AI-powered content summarization.
 
 ## Overview
 
-Athena is a lightweight RESTful API service for managing bookmarks. It provides functionality to store, retrieve, and organize bookmarks with support for archiving and user-specific collections. All bookmark endpoints are protected with JWT authentication to ensure users can only access their own bookmarks.
+Athena is a production-ready RESTful API service for managing bookmarks with intelligent features. It automatically fetches website metadata (titles, images) and generates AI-powered content summaries for bookmarks. All bookmark endpoints are protected with JWT authentication to ensure users can only access their own bookmarks.
 
 ## Features
 
 - ✅ JWT-based authentication and authorization
-- ✅ User registration and login
+- ✅ User registration and login with tier support (free/paid)
 - ✅ RESTful API for bookmark management
-- ✅ Create, retrieve, and archive bookmarks
-- ✅ User-specific bookmark collections with access control
-- ✅ Auto-generated UUID for bookmark and user IDs
-- ✅ Password hashing with bcrypt
-- ✅ Structured logging with Uber's Zap (development and production modes)
-- ✅ Automatic website title fetching for bookmarks
-- ✅ Pluggable storage backends: In-memory and PostgreSQL
-- ✅ Database migrations with automatic schema creation
+- ✅ Create, retrieve, archive, and delete bookmarks
+- ✅ **Automatic website metadata extraction:**
+  - Page titles from HTML `<title>` tags
+  - Images from Open Graph meta tags
+  - AI-powered content summaries (for paid tier)
+- ✅ **Concurrent metadata fetching** for optimal performance
+- ✅ Pluggable storage backends: In-memory and Cloud Firestore
 - ✅ Clean architecture with separation of concerns (handler, service, repository layers)
-- ✅ Built-in logging, CORS, and recovery middleware
 - ✅ Docker support with multi-stage builds
-- ✅ Comprehensive test coverage (95.9% handler, 100% repository, 98.4% service)
+- ✅ Comprehensive test coverage
+- ✅ CI/CD pipeline with GitHub Actions
+- ✅ Pagination support for bookmark lists
+- ✅ LLM integration (Anthropic Claude, OpenAI, Google Gemini)
 
 ## Tech Stack
 
 - **Language**: Go 1.25.1
 - **Web Framework**: [Echo v4](https://echo.labstack.com/)
 - **Authentication**: JWT with [golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) & [echo-jwt/v4](https://github.com/labstack/echo-jwt)
-- **Database**: [PostgreSQL](https://www.postgresql.org/) with [lib/pq](https://github.com/lib/pq) driver
+- **Cloud Storage**: [Cloud Firestore](https://cloud.google.com/firestore) for persistent storage
 - **Logging**: [Uber Zap](https://github.com/uber-go/zap)
 - **Password Hashing**: bcrypt
 - **ID Generation**: [Google UUID](https://github.com/google/uuid)
 - **HTML Parsing**: [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html)
+- **LLM Integration**: [LangChain Go](https://github.com/tmc/langchaingo) with Anthropic/OpenAI/Gemini support
 - **Testing**: [testify](https://github.com/stretchr/testify)
 
 ## Project Structure
@@ -54,22 +56,33 @@ athena/
 │   │   ├── jwt_helper.go                # JWT generation, validation, extraction
 │   │   └── service.go                   # Service interfaces for handlers
 │   ├── service/                         # Business logic layer
-│   │   ├── bookmark_service.go          # Bookmark business logic
+│   │   ├── bookmark_service.go          # Bookmark business logic with metadata fetching
 │   │   ├── bookmark_service_test.go     # Bookmark service tests
 │   │   ├── user_service.go              # User authentication & management
 │   │   ├── user_service_test.go         # User service tests
-│   │   └── repository.go                # Repository interfaces (UserRepository, BookmarkRepository)
+│   │   └── repository.go                # Repository interfaces
 │   ├── repository/                      # Data access layer
 │   │   ├── bookmark_inmem_repo.go       # In-memory bookmark storage
 │   │   ├── bookmark_inmem_repo_test.go  # Bookmark repository tests
+│   │   ├── bookmark_firestore_repo.go   # Cloud Firestore bookmark storage
 │   │   ├── user_inmem_repo.go           # In-memory user storage
-│   │   └── user_inmem_repo_test.go      # User repository tests
+│   │   ├── user_inmem_repo_test.go      # User repository tests
+│   │   ├── user_firestore_repo.go       # Cloud Firestore user storage
+│   │   ├── web_repo.go                  # Web metadata fetching & LLM integration
+│   │   └── web_repo_test.go             # Web repository tests
 │   ├── transport/                       # HTTP transport layer (DTOs)
 │   │   ├── bookmark_transport.go        # Bookmark request/response DTOs
 │   │   └── user_transport.go            # User request/response DTOs
-│   └── model/                           # Domain models
-│       ├── bookmark.go                  # Bookmark domain model
-│       └── user.go                      # User domain model
+│   ├── model/                           # Domain models
+│   │   ├── bookmark.go                  # Bookmark domain model
+│   │   └── user.go                      # User domain model with tier support
+│   └── logger/                          # Structured logging
+│       ├── logger.go                    # Zap logger configuration
+│       └── logger_test.go               # Logger tests
+├── .github/workflows/
+│   └── athena.yml                       # CI/CD pipeline
+├── docker-compose.yml                   # Docker services configuration
+├── Dockerfile                           # Multi-stage Docker build
 ├── go.mod                               # Go module dependencies
 └── README.md                            # This file
 ```
@@ -79,6 +92,8 @@ athena/
 ### Prerequisites
 
 - Go 1.25.1 or higher
+- (Optional) GCP account with Firestore for persistent storage
+- (Optional) Docker
 
 ### Installation
 
@@ -99,19 +114,22 @@ go mod download
 export JWT_SECRET="your-super-secret-key-change-this-in-production"
 
 # Storage configuration (defaults to in-memory)
-export STORAGE_TYPE="postgres"  # Options: memory (default), postgres
+export STORAGE_TYPE="firestore"  # Options: memory (default), firestore
 
-# PostgreSQL configuration (only needed if STORAGE_TYPE=postgres)
-export DB_HOST="localhost"
-export DB_PORT="5432"
-export DB_USER="postgres"
-export DB_PASSWORD="your_password"
-export DB_NAME="athena"
-export DB_SSLMODE="disable"  # Use "require" in production
+# Cloud Firestore configuration (only needed if STORAGE_TYPE=firestore)
+export GCP_PROJECT_ID="your-project-id"
+export GCP_FIRESTORE_DATABASE_ID="athena"
 
 # Logging configuration
 export APP_ENV="production"  # Use "production" for JSON logs, default is development
 export LOG_LEVEL="info"      # Options: debug, info, warn, error, fatal
+
+# LLM features for content summarization (optional, for paid tier)
+export LLM_SUMMARY_CONTENT="true"        # Enable AI content summaries
+export LLM_MODEL="anthropic"             # Options: anthropic, openai, gemini
+export ANTHROPIC_API_KEY="your-key"      # If using Anthropic Claude
+export OPENAI_API_KEY="your-key"         # If using OpenAI
+export GEMINI_API_KEY="your-key"         # If using Google Gemini
 ```
 
 ### Running the Server
@@ -127,20 +145,14 @@ The server will start on `http://localhost:1323`
 #### Option 2: Run with Docker
 
 ```bash
-# Build and run with docker-compose
-docker-compose up -d
-
-# Or build and run manually
+# Build and run with docker
 docker build -t athena:latest .
 docker run -p 1323:1323 -e JWT_SECRET="your-secret-key" athena:latest
 ```
 
 The server will be available at `http://localhost:1323`
 
-To stop the Docker container:
-```bash
-docker-compose down
-```
+
 
 ### Building
 
@@ -169,20 +181,19 @@ docker build -t athena:latest .
 
 ### Public Endpoints
 
-#### Public Endpoints
-
-####HealthCheck
+#### Health Check
 - **GET** `/ping`
   - Response: `pong` (200 OK)
-  - Purpose: Verify server is running#### UserUser RegistrationRegistration
-- **POST** `/usersusers`
+  - Purpose: Verify server is running
+
+#### User Registration
+- **POST** `/users`
   - Request body:
     ```json
     {
-      "namename": "John Doe",
-      "email: "John Doe",
+      "name": "John Doe",
       "email": "john@example.com",
-      "passwordpassword": "securepassword123securepassword123"
+      "password": "securepassword123"
     }
     ```
   - Response: `201 Created`
@@ -191,6 +202,7 @@ docker build -t athena:latest .
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "name": "John Doe",
       "email": "john@example.com",
+      "tier": "free",
       "created_at": "2025-11-02T14:00:00Z",
       "updated_at": "2025-11-02T14:00:00Z"
     }
@@ -199,48 +211,6 @@ docker build -t athena:latest .
     - `400` - Name, email, or password missing
     - `409` - Email already exists
 
-#### User Login
-- `POST /login`
-  - Request body:
-    ```json
-    {
-      "email": "john@example.com",
-      "password": "securepassword123"
-    }
-    ```
-  - Response: `200 OK`
-    ```json
-    {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "token_type": "Bearer",
-      "expires_in": 86400,
-      "user": {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "name": "John Doe",
-        "email": "john@example.com",
-        "created_at": "2025-11-02T14:00:00Z",
-        "updated_at": "2025-11-02T14:00:00Z"
-      }
-    }
-    ```
-
-### Protected Endpoints (Require JWT Authentication)
-
-All bookmark endpoints require a valid JWT token in the Authorization header:
-```
-Authorization: Bearer <your-jwt-token>
-```
-
-#### Create Bookmark
-- `POST /bookmarks`
-  - Headers: `Authorization: Bearer <token>`
-  - Request body:
-    ```json
-    {
-      "url": "https://example.com"
-    }
-    ```
-  - Response: `201 Created`
 #### User Login
 - **POST** `/login`
   - Request body:
@@ -260,6 +230,7 @@ Authorization: Bearer <your-jwt-token>
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "name": "John Doe",
         "email": "john@example.com",
+        "tier": "free",
         "created_at": "2025-11-02T14:00:00Z",
         "updated_at": "2025-11-02T14:00:00Z"
       }
@@ -290,37 +261,22 @@ Authorization: Bearer <your-jwt-token>
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "url": "https://example.com",
-      "title": "",
-      "user_id": "user-id-from-jwtid-from-jwt",
-      "is_archived": false
+      "title": "Example Domain",
+      "main_image_url": "https://example.com/og-image.png",
+      "content_summary": "AI-generated summary...",
+      "user_id": "user-id-from-jwt",
+      "is_archived": false,
+      "created_at": "2025-11-15T10:30:45.123Z"
     }
     ```
-  - Note: `user_id` is automatically extracted from the JWT token
+  - Note: 
+    - `user_id` is automatically extracted from the JWT token
+    - Metadata (title, image, summary) is fetched automatically and concurrently
+    - `content_summary` is only populated for paid tier users
   - Errors:
     - `400` - URL is missing
     - `401` - Invalid or missing JWT token
 
-#### Get Single Bookmark
-- `GET /bookmarks/:id`
-  - Headers: `Authorization: Bearer <token>`
-  - Response: `200 OK`
-    ```json
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "url": "https://example.com",
-      "title": "",
-      "user_id": "user-id-from-jwt",
-      "is_archived": false
-    }
-    ```
-  - Returns `403 Forbidden` if the bookmark belongs to a different user
-
-#### Get All Bookmarks
-- `GET /bookmarks?archived=false`
-  - Headers: `Authorization: Bearer <token>`
-  - Query parameters:
-    - `archived` (optional): `true` or `false` (default: `false`)
-  - Response: `200 OK`
 #### Get Single Bookmark
 - **GET** `/bookmarks/:id`
   - Headers: `Authorization: Bearer <token>`
@@ -330,9 +286,12 @@ Authorization: Bearer <your-jwt-token>
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "url": "https://example.com",
-      "title": "",
+      "title": "Example Domain",
+      "main_image_url": "https://example.com/og-image.png",
+      "content_summary": "AI-generated summary...",
       "user_id": "user-id-from-jwt",
-      "is_archived": false
+      "is_archived": false,
+      "created_at": "2025-11-15T10:30:45.123Z"
     }
     ```
   - Errors:
@@ -342,22 +301,32 @@ Authorization: Bearer <your-jwt-token>
     - `404` - Bookmark not found
 
 #### Get All Bookmarks
-- **GET** `/bookmarks?archived=false`
+- **GET** `/bookmarks?archived=false&page=1&page_size=20`
   - Headers: `Authorization: Bearer <token>`
   - Query parameters:
     - `archived` (optional): `true` or `false` (default: `false`)
+    - `page` (optional): Page number (default: `1`)
+    - `page_size` (optional): Items per page (default: `20`, max: `100`)
   - Response: `200 OK`
     ```json
-    [
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "url": "https://example.com",
-        "title": "",
-        "user_id": "user-id-from-jwtid-from-jwt",
-        "created_at": "2025-1111-02T1402T14:00:00Z",
-        "is_archived": false
-      }
-    ]
+    {
+      "bookmarks": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440000",
+          "url": "https://example.com",
+          "title": "Example Domain",
+          "main_image_url": "https://example.com/og-image.png",
+          "content_summary": "AI-generated summary...",
+          "user_id": "user-id-from-jwt",
+          "created_at": "2025-11-02T14:00:00Z",
+          "is_archived": false
+        }
+      ],
+      "total_count": 150,
+      "page": 1,
+      "page_size": 20,
+      "total_pages": 8
+    }
     ```
   - Note: Only returns bookmarks for the authenticated user
   - Errors:
@@ -367,7 +336,17 @@ Authorization: Bearer <your-jwt-token>
 - **POST** `/bookmarks/:id/archive`
   - Headers: `Authorization: Bearer <token>`
   - URL Parameters: `id` - Bookmark UUID
+  - Response: `204 No Content`
+  - Errors:
+    - `400` - ID is missing
+    - `401` - Invalid or missing JWT token
+    - `403` - Bookmark belongs to a different user
+    - `404` - Bookmark not found
+
+#### Delete Bookmark
+- **DELETE** `/bookmarks/:id`
   - Headers: `Authorization: Bearer <token>`
+  - URL Parameters: `id` - Bookmark UUID
   - Response: `204 No Content`
   - Errors:
     - `400` - ID is missing
@@ -392,76 +371,9 @@ TOKEN=$(curl -s -X POST http://localhost:1323/login \
   -d '{"email":"test@example.com","password":"password123"}' \
   | jq -r '.token')
 
-# 4. Create a bookmark
-curl -X POST http://localhost:1323/bookmarks \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"url":"https://example.com"}'
-
-# 5. Get all bookmarks
-curl -X GET http://localhost:1323/bookmarks \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Security Features
-
-### Authentication
-- JWT-based stateless authentication
-- Token expiration: 24 hours
-- Secure password hashing with bcrypt (cost factor 10)
-- Maximum password length: 72 bytes (bcrypt limitation)
-
-### Authorization
-- Users can only access their own bookmarks
-- User ID is extracted from JWT token (not from request parameters)
-- Authorization checks on all bookmark operations:
-  - Get bookmark: Verifies ownership before returning
-  - Archive bookmark: Verifies ownership before archiving
-  - List bookmarks: Automatically filtered by authenticated user
-
-### Password Requirements
-- Minimum length: Not enforced (consider adding)
-- Maximum length: 72 bytes
-- Stored as bcrypt hash (never plaintext)
-
-### Environment Variables
-- `JWT_SECRET`: Secret key for signing JWT tokens
-  - Default: `your-secret-key-change-this-in-production` (⚠️ CHANGE IN PRODUCTION!)
-  - Recommended: Use a strong random string (at least 32 characters)
-
-## Data Models
-
-### User
-```go
-type User struct {
-    ID        string    // Auto-generated UUID
-    Name      string    // User's full name
-    Email     string    // User's email (unique)
-    Password  string    // Bcrypt hashed password
-    CreatedAt time.Time // Registration timestamp
-    UpdatedAt time.Time // Last update timestamp
-}
-```
-## Quick Start Example
-
-```bash
-# 1. Start the server
-./athena
-
-# 2. Create a user
-curl -X POST http://localhost:1323/users \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@example.com","password":"password123"}'
-
-# 3. Login to get JWT token
-TOKEN=$(curl -s -X POST http://localhost:1323/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}' \
-  | jq -r '.token')
-
 echo "Token: $TOKEN"
 
-# 4. Create a bookmark
+# 4. Create a bookmark (automatically fetches metadata)
 curl -X POST http://localhost:1323/bookmarks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
@@ -471,16 +383,24 @@ curl -X POST http://localhost:1323/bookmarks \
 curl -X GET http://localhost:1323/bookmarks \
   -H "Authorization: Bearer $TOKEN"
 
-# 6. Get specific bookmark (replace BOOKMARK_ID)
+# 6. Get bookmarks with pagination
+curl -X GET "http://localhost:1323/bookmarks?page=1&page_size=10" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 7. Get specific bookmark (replace BOOKMARK_ID)
 curl -X GET http://localhost:1323/bookmarks/BOOKMARK_ID \
   -H "Authorization: Bearer $TOKEN"
 
-# 7. Archive a bookmark (replace BOOKMARK_ID)
+# 8. Archive a bookmark (replace BOOKMARK_ID)
 curl -X POST http://localhost:1323/bookmarks/BOOKMARK_ID/archive \
   -H "Authorization: Bearer $TOKEN"
 
-# 8. Get archived bookmarks
+# 9. Get archived bookmarks
 curl -X GET http://localhost:1323/bookmarks?archived=true \
+  -H "Authorization: Bearer $TOKEN"
+
+# 10. Delete a bookmark (replace BOOKMARK_ID)
+curl -X DELETE http://localhost:1323/bookmarks/BOOKMARK_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -499,6 +419,7 @@ curl -X GET http://localhost:1323/bookmarks?archived=true \
 - Authorization checks on all bookmark operations:
   - **Get bookmark**: Verifies ownership before returning (403 if unauthorized)
   - **Archive bookmark**: Verifies ownership before archiving (403 if unauthorized)
+  - **Delete bookmark**: Verifies ownership before deleting (403 if unauthorized)
   - **List bookmarks**: Automatically filtered by authenticated user
   - **Create bookmark**: User ID automatically set from JWT token
 
@@ -531,6 +452,7 @@ type User struct {
     Name      string    // User's full name
     Email     string    // User's email (unique)
     Password  string    // Bcrypt hashed password
+    Tier      string    // User tier: "free" or "paid"
     CreatedAt time.Time // Registration timestamp
     UpdatedAt time.Time // Last update timestamp
 }
@@ -539,22 +461,15 @@ type User struct {
 ### Bookmark
 ```go
 type Bookmark struct {
-    ID         string    // Auto-generated UUID
-    UserID     string    // User identifier (owner)
-    URL        string    // Bookmark URL
-    Title      string    // Bookmark title (reserved for future use)
-    IsArchived bool      // Archive status
-    CreatedAt  time.Time // Creation timestamp
-}
-```
-
-### JWT Claims
-```go
-type JWTClaims struct {
-    UserID string // User ID
-    Email  string // User email
-    Name   string // User name
-    jwt.RegisteredClaims
+    ID             string    // Auto-generated UUID
+    UserID         string    // User identifier (owner)
+    URL            string    // Bookmark URL
+    Title          string    // Page title (auto-fetched from HTML)
+    MainImageURL   string    // OpenGraph image (auto-fetched)
+    ContentSummary string    // AI-generated summary (paid tier only)
+    IsArchived     bool      // Archive status
+    CreatedAt      time.Time // Creation timestamp
+    UpdatedAt      time.Time // Last update timestamp
 }
 ```
 
@@ -568,81 +483,98 @@ type JWTClaims struct {
 }
 ```
 
-## Docker
+## Intelligent Features
 
-The application includes Docker support for easy deployment with PostgreSQL database.
+### Automatic Metadata Extraction
 
-### Quick Start with Docker Compose
+When creating a bookmark, Athena automatically fetches metadata from the target URL using **concurrent goroutines** for optimal performance:
+
+1. **Page Title**: Extracted from HTML `<title>` tag
+2. **Main Image**: Extracted from OpenGraph `<meta property="og:image">` tag
+3. **Content Summary**: AI-generated summary (paid tier only)
+
+All three operations run in parallel and gracefully handle failures. If metadata fetching fails, the bookmark is still created with the URL.
+
+### AI-Powered Content Summarization
+
+For paid tier users, Athena can generate intelligent content summaries using Large Language Models:
+
+**Supported LLM Providers:**
+- **Anthropic Claude** (recommended)
+- **OpenAI GPT**
+- **Google Gemini**
+
+**Configuration:**
+```bash
+export LLM_SUMMARY_CONTENT="true"
+export LLM_MODEL="anthropic"  # or "openai" or "gemini"
+export ANTHROPIC_API_KEY="your-api-key"
+```
+
+The content summary is generated asynchronously and won't block bookmark creation if it fails.
+
+### User Tier System
+
+Athena supports a tiered user system:
+
+- **Free Tier**: Basic bookmark management (no AI summaries)
+- **Paid Tier**: Full features including AI-powered content summarization
+
+The tier is stored in the user model and checked before generating LLM summaries.
+
+## Storage Backends
+
+### In-Memory Storage (Development)
+
+Default storage backend using Go maps. Data is lost when the server restarts.
 
 ```bash
-# Start both API and PostgreSQL
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f
-
-# Check specific service logs
-docker-compose logs -f athena
-docker-compose logs -f postgres
-
-# Stop all services
-docker-compose down
-
-# Stop and remove volumes (deletes database data)
-docker-compose down -v
+export STORAGE_TYPE="memory"
+go run cmd/api-server/main.go
 ```
+
+### Cloud Firestore (Production)
+
+Google Cloud Platform integration for serverless deployment.
+
+```bash
+# Configure Firestore
+export STORAGE_TYPE="firestore"
+export GCP_PROJECT_ID="your-project-id"
+export GCP_FIRESTORE_DATABASE_ID="athena"
+
+# Run server
+go run cmd/api-server/main.go
+```
+
+**Features:**
+- Serverless, auto-scaling storage
+- Built-in replication and backups
+- Native GCP integration
+
+## Docker
+
+The application includes Docker support for easy deployment.
 
 ### Docker Configuration
 
-#### Environment Variables
-
-Set environment variables via `.env` file:
+Configure via environment variables:
 
 ```bash
-# Copy example file
-cp .env.example .env
+# Core settings
+JWT_SECRET=your-super-secret-key-change-in-production
+STORAGE_TYPE=firestore
+APP_ENV=production
+LOG_LEVEL=info
 
-# Edit .env and configure your settings
-nano .env
-```
+# Firestore (for persistent storage)
+GCP_PROJECT_ID=your-project-id
+GCP_FIRESTORE_DATABASE_ID=athena
 
-**Important variables**:
-- `JWT_SECRET` - Change in production!
-- `DB_PASSWORD` - Database password
-- `STORAGE_TYPE` - Set to `postgres` (default)
-- `LOG_LEVEL` - Logging verbosity
-
-#### Docker Compose Services
-
-The `docker-compose.yml` includes:
-
-**PostgreSQL Service**:
-- Image: `postgres:16-alpine`
-- Port: 5432
-- Persistent storage with named volume
-- Health checks for reliable startup
-- Configurable via environment variables
-
-**Athena API Service**:
-- Built from Dockerfile
-- Port: 1323
-- Automatic database migrations on startup
-- Waits for PostgreSQL to be healthy
-- Health checks via `/ping` endpoint
-- Auto-restart unless stopped
-- JSON logging in production mode
-
-**Network**:
-- Custom bridge network for service communication
-- Services communicate via service names
-
-#### Alternative: In-Memory Storage
-
-For development without PostgreSQL:
-
-```bash
-# Use in-memory configuration
-docker-compose -f docker-compose.memory.yml up -d
+# LLM features (optional)
+LLM_SUMMARY_CONTENT=true
+LLM_MODEL=anthropic
+ANTHROPIC_API_KEY=your-api-key
 ```
 
 ### Building the Docker Image
@@ -673,9 +605,12 @@ docker run -d -p 1323:1323 \
   --name athena-api \
   athena:latest
 
-# Run with volume mount (for future file storage)
+# Run with LLM support
 docker run -d -p 1323:1323 \
-  -v $(pwd)/data:/app/data \
+  -e JWT_SECRET="your-secret" \
+  -e LLM_SUMMARY_CONTENT="true" \
+  -e LLM_MODEL="anthropic" \
+  -e ANTHROPIC_API_KEY="your-api-key" \
   --name athena-api \
   athena:latest
 ```
@@ -686,72 +621,21 @@ docker run -d -p 1323:1323 \
 # View running containers
 docker ps
 
-# View all containers (including stopped)
-docker ps -a
-
 # View logs
-docker-compose logs athena
-docker-compose logs postgres
-docker-compose logs -f  # Follow all logs
+docker logs athena-api
+docker logs -f athena-api  # Follow logs
 
-# Stop services
-docker-compose stop
+# Stop container
+docker stop athena-api
 
-# Start services
-docker-compose start
+# Start container
+docker start athena-api
 
-# Restart services
-docker-compose restart
+# Restart container
+docker restart athena-api
 
-# Remove containers
-docker-compose down
-
-# Remove containers and volumes (deletes database)
-docker-compose down -v
-```
-
-### Database Management
-
-#### Access PostgreSQL
-
-```bash
-# Connect to PostgreSQL container
-docker exec -it athena-postgres psql -U athena_user -d athena
-
-# Run SQL query
-docker exec -it athena-postgres psql -U athena_user -d athena -c "SELECT COUNT(*) FROM bookmarks;"
-
-# Dump database
-docker exec athena-postgres pg_dump -U athena_user athena > backup.sql
-
-# Restore database
-docker exec -i athena-postgres psql -U athena_user athena < backup.sql
-```
-
-#### View Database Data
-
-```bash
-# List all bookmarks
-docker exec -it athena-postgres psql -U athena_user -d athena -c "SELECT id, title, url FROM bookmarks;"
-
-# Check table structure
-docker exec -it athena-postgres psql -U athena_user -d athena -c "\d bookmarks"
-```
-
-#### Database Volume Management
-
-```bash
-# View volumes
-docker volume ls
-
-# Inspect volume
-docker volume inspect athena_postgres_data
-
-# Backup volume
-docker run --rm -v athena_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz -C /data .
-
-# Restore volume
-docker run --rm -v athena_postgres_data:/data -v $(pwd):/backup alpine sh -c "cd /data && tar xzf /backup/postgres_backup.tar.gz"
+# Remove container
+docker rm athena-api
 ```
 
 ### Health Check
@@ -784,42 +668,6 @@ Benefits:
 - No Go toolchain in final image (security)
 - Static binary with no external dependencies
 - Runs as non-root user for security
-
-### Docker Best Practices Implemented
-
-- ✅ Multi-stage build for minimal image size
-- ✅ Non-root user (user `athena`, UID 1000)
-- ✅ Health checks for container monitoring
-- ✅ `.dockerignore` to exclude unnecessary files
-- ✅ Static binary (CGO_ENABLED=0)
-- ✅ Security: CA certificates for HTTPS, timezone data
-- ✅ Optimized layer caching (dependencies before source)
-
-### Troubleshooting
-
-#### Container won't start
-```bash
-# Check logs
-docker logs athena-api
-
-# Check if port is already in use
-lsof -i :1323
-```
-
-#### Health check failing
-```bash
-# Test health endpoint manually
-curl http://localhost:1323/ping
-
-# Check container logs
-docker logs athena-api
-```
-
-#### Permission issues
-```bash
-# Ensure volumes have correct permissions
-chmod -R 755 ./data
-```
 
 ## Testing
 
@@ -857,12 +705,6 @@ go test -v ./internal/service/
 go test -v ./internal/repository/
 ```
 
-Run specific test:
-```bash
-go test -v -run TestAuthHandler_Login ./internal/handler/
-go test -v -run TestBookmarkHandler_CreateBookmark ./internal/handler/
-```
-
 ### Run Specific Test
 ```bash
 # Auth handler tests
@@ -871,8 +713,8 @@ go test -v -run TestAuthHandler_Login ./internal/handler/
 # Bookmark handler tests
 go test -v -run TestBookmarkHandler_CreateBookmark ./internal/handler/
 
-# JWT extraction tests
-go test -v -run TestBookmarkHandler_GetBookmark_Forbidden ./internal/handler/
+# Web repository tests
+go test -v -run TestWebRepository ./internal/repository/
 ```
 
 ### Test Coverage Breakdown
@@ -884,6 +726,7 @@ go test -v -run TestBookmarkHandler_GetBookmark_Forbidden ./internal/handler/
 - **Repository Layer**: 100.0%
   - `bookmark_inmem_repo.go`: Full coverage
   - `user_inmem_repo.go`: Full coverage
+  - `web_repo.go`: Covered by integration tests
 - **Service Layer**: 98.4%
   - `bookmark_service.go`: Nearly complete coverage
   - `user_service.go`: Nearly complete coverage
@@ -914,23 +757,26 @@ The project follows a clean architecture pattern with clear separation of concer
    - **Responsibilities**:
      - Enforce business rules
      - Password hashing and authentication
-     - Bookmark validation (e.g., ID must be empty on creation)
+     - Bookmark validation
      - Orchestrate repository operations
+     - Coordinate concurrent metadata fetching
    - **Files**:
      - `user_service.go`: User authentication and management
-     - `bookmark_service.go`: Bookmark business logic
-     - `repository.go`: UserRepository interface
-     - `bookmark_repository.go`: BookmarkRepository interface
+     - `bookmark_service.go`: Bookmark business logic with metadata fetching
+     - `repository.go`: Repository interfaces
 
 3. **Repository Layer** (`internal/repository/`)
    - **Purpose**: Data persistence abstraction
    - **Responsibilities**:
      - CRUD operations on data store
-     - Currently in-memory implementation
-     - Interface-based for easy database migration
+     - Multiple implementations (in-memory, Firestore)
+     - Web metadata extraction and LLM integration
    - **Files**:
      - `user_inmem_repo.go`: In-memory user storage
      - `bookmark_inmem_repo.go`: In-memory bookmark storage
+     - `user_firestore_repo.go`: Firestore user storage
+     - `bookmark_firestore_repo.go`: Firestore bookmark storage
+     - `web_repo.go`: Web scraping and LLM integration
 
 4. **Transport Layer** (`internal/transport/`)
    - **Purpose**: HTTP API contracts (DTOs)
@@ -939,7 +785,7 @@ The project follows a clean architecture pattern with clear separation of concer
      - Separate external API from internal domain
    - **Files**:
      - `user_transport.go`: LoginRequest, CreateUserRequest, UserResponse, LoginResponse
-     - `bookmark_transport.go`: BookmarkTransport
+     - `bookmark_transport.go`: BookmarkTransport, BookmarkListResponse
 
 5. **Model Layer** (`internal/model/`)
    - **Purpose**: Domain models
@@ -947,8 +793,16 @@ The project follows a clean architecture pattern with clear separation of concer
      - Pure data structures
      - Minimal business logic
    - **Files**:
-     - `user.go`: User domain model
-     - `bookmark.go`: Bookmark domain model, BookmarkQuery
+     - `user.go`: User domain model with tier support
+     - `bookmark.go`: Bookmark domain model with metadata fields
+
+6. **Logger Layer** (`internal/logger/`)
+   - **Purpose**: Structured logging
+   - **Responsibilities**:
+     - Configure Zap logger for development/production
+     - Provide consistent logging interface
+   - **Files**:
+     - `logger.go`: Zap logger configuration
 
 ### Data Flow
 
@@ -957,20 +811,21 @@ HTTP Request
     ↓
 [Handler] ← Validates request, extracts JWT claims
     ↓
-[Service] ← Business logic, password hashing
+[Service] ← Business logic, concurrent metadata fetching
+    ↓ ↓ ↓
+[BookmarkRepo] [UserRepo] [WebRepo] ← Data persistence & external fetching
     ↓
-[Repository] ← Data persistence
-    ↓
-[In-Memory Store]
+[Storage: Firestore/Memory]
 ```
 
 ### Design Patterns
 
 - **Repository Pattern**: Abstracts data access logic
 - **Dependency Injection**: Services and handlers receive dependencies via constructors
-- **Interface Segregation**: Small, focused interfaces (e.g., `BookmarkRepository`, `UserRepository`)
+- **Interface Segregation**: Small, focused interfaces (BookmarkRepository, UserRepository, WebRepository)
 - **Middleware Pattern**: JWT authentication, CORS, logging, recovery
-- **Helper Functions**: Reusable JWT claim extraction logic
+- **Concurrent Processing**: Goroutines for parallel metadata fetching
+- **Helper Functions**: Reusable JWT claim extraction logic (`getAuthenticatedUser`)
 
 ### Security Architecture
 
@@ -978,30 +833,6 @@ HTTP Request
 - **Authorization at Handler Level**: Each protected endpoint verifies user ownership
 - **Secure Password Storage**: bcrypt hashing with salt (never store plaintext)
 - **Defense in Depth**: Multiple layers of validation (handler, service, repository)
-
-## Error Handling
-
-The API returns standard HTTP status codes:
-
-- `200 OK` - Successful GET request
-- `201 Created` - Successful POST request (resource created)
-- `204 No Content` - Successful POST request (no content returned)
-- `400 Bad Request` - Invalid request parameters or body
-- `401 Unauthorized` - Missing or invalid JWT token
-- `403 Forbidden` - Valid token but insufficient permissions
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Resource already exists (e.g., duplicate email)
-- `500 Internal Server Error` - Server-side error
-
-Error response format:
-```json
-{
-  "message": "Error description"
-}
-```
-- **Interface Segregation**: Small, focused interfaces (BookmarkRepository, UserRepository, UserService, BookmarkService)
-- **Middleware Pattern**: JWT authentication, CORS, logging, recovery
-- **Helper Functions**: Reusable JWT claim extraction logic (`getAuthenticatedUser`)
 
 ### Key Design Decisions
 
@@ -1011,62 +842,48 @@ Error response format:
 
 3. **Authorization at Handler**: Authorization checks happen at the handler layer before calling services.
 
-4. **Service Interfaces in Handler Package**: Service interfaces are defined in `internal/handler/service.go` to avoid circular dependencies.
+4. **Concurrent Metadata Fetching**: Title, image, and LLM summary are fetched concurrently using goroutines for optimal performance.
 
-5. **Repository Interfaces in Service Package**: Repository interfaces are defined in the service package where they're consumed.
+5. **Graceful Degradation**: If metadata fetching fails, bookmarks are still created with the URL.
 
-## Error Handling
+## CI/CD Pipeline
 
-The API returns standard HTTP status codes:
+Athena uses GitHub Actions for continuous integration and deployment to Google Cloud Run.
 
-- `200 OK` - Successful GET request
-- `201 Created` - Successful POST request (resource created)
-- `204 No Content` - Successful POST request (no content returned, e.g., archive)
-- `400 Bad Request` - Invalid request parameters or body
-- `401 Unauthorized` - Missing or invalid JWT token
-- `403 Forbidden` - Valid token but insufficient permissions (accessing other user's resources)
-- `404 Not Found` - Resource not found
-- `409 Conflict` - Resource already exists (e.g., duplicate email)
-- `500 Internal Server Error` - Server-side error
+### Workflow Overview
 
-Error response format:
-```json
-{
-  "message": "Error description"
-}
-```
+The CI/CD pipeline consists of three jobs:
 
-## PostgreSQL Storage
+1. **Test** - Runs on all pushes and pull requests
+   - Runs unit tests with race detection
+   - Generates code coverage reports
+   - Enforces 50% minimum coverage threshold
 
-Athena supports PostgreSQL as a persistent storage backend. See [docs/postgresql.md](docs/postgresql.md) for detailed setup instructions.
+2. **Build** - Runs only on pushes to main branch
+   - Builds Docker image
+   - Pushes to GCP Artifact Registry
+   - Tags images with branch name, SHA, and `latest`
 
-### Quick Setup
+3. **Deploy** - Runs only on pushes to main branch
+   - Deploys to Google Cloud Run
+   - Configures auto-scaling and environment variables
+   - Outputs the deployed service URL
 
-```bash
-# Create database
-createdb athena
+### Required GitHub Secrets
 
-# Configure environment
-export STORAGE_TYPE=postgres
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_USER=postgres
-export DB_PASSWORD=your_password
-export DB_NAME=athena
+Configure these secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):
 
-# Run server (migrations run automatically)
-go run ./cmd/api-server
-```
+- **`GCP_SA_KEY`** - GCP Service Account JSON key
+- **`GCP_PROJECT_ID`** - Your GCP project ID
+- **`GCP_REGION`** - GCP region for deployment (e.g., `us-central1`)
+- **`GCP_ARTIFACT_REGISTRY_REPO`** - Artifact Registry repository name
+- **`JWT_SECRET`** - JWT secret key for your application
 
-### Features
+### Workflow Triggers
 
-- ✅ Automatic database migrations
-- ✅ Connection pooling
-- ✅ Indexed queries for performance
-- ✅ Ordered results (newest first)
-- ✅ Transaction support
-
-For production setup, Docker Compose configuration, and troubleshooting, see the [PostgreSQL documentation](docs/postgresql.md).
+- **Pull Requests** to main/develop: Run tests only
+- **Push** to main: Run tests → build → deploy
+- **Push** to other branches: Run tests only
 
 ## Logging
 
@@ -1082,141 +899,45 @@ Athena uses [Uber Zap](https://github.com/uber-go/zap) for structured, high-perf
 
 **Development:**
 ```
-2024-01-15T10:30:45.123+0700    INFO    service/bookmark_service.go:42    Created bookmark    {"id": "abc123", "user_id": "user1"}
+2025-11-15T10:30:45.123+0700    INFO    service/bookmark_service.go:42    Created bookmark    {"id": "abc123", "user_id": "user1"}
 ```
 
 **Production:**
 ```json
-{"level":"info","timestamp":"2024-01-15T10:30:45.123Z","msg":"Created bookmark","id":"abc123","user_id":"user1"}
+{"level":"info","timestamp":"2025-11-15T10:30:45.123Z","msg":"Created bookmark","id":"abc123","user_id":"user1"}
 ```
 
-For detailed logging documentation, see [docs/logging.md](docs/logging.md).
+## Error Handling
 
-## CI/CD Pipeline
+The API returns standard HTTP status codes:
 
-Athena uses GitHub Actions for continuous integration and deployment. The workflow automatically tests, builds, and deploys your application to Google Cloud Run.
+- `200 OK` - Successful GET request
+- `201 Created` - Successful POST request (resource created)
+- `204 No Content` - Successful POST/DELETE request (no content returned)
+- `400 Bad Request` - Invalid request parameters or body
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Valid token but insufficient permissions (accessing other user's resources)
+- `404 Not Found` - Resource not found
+- `409 Conflict` - Resource already exists (e.g., duplicate email)
+- `500 Internal Server Error` - Server-side error
 
-### Workflow Overview
-
-The CI/CD pipeline consists of three jobs:
-
-1. **Test** - Runs on all pushes and pull requests
-   - Runs unit tests with race detection
-   - Generates code coverage reports
-   - Uploads coverage to Codecov
-   - Enforces 80% minimum coverage threshold
-
-2. **Build** - Runs only on pushes to main/master branch
-   - Builds Docker image
-   - Pushes to GCP Artifact Registry
-   - Tags images with branch name, SHA, and `latest`
-
-3. **Deploy** - Runs only on pushes to main/master branch
-   - Deploys to Google Cloud Run
-   - Configures auto-scaling and environment variables
-   - Outputs the deployed service URL
-
-### Required GitHub Secrets
-
-Configure these secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):
-
-- **`GCP_SA_KEY`** - GCP Service Account JSON key with the following permissions:
-  - `roles/artifactregistry.writer` - Push Docker images
-  - `roles/run.admin` - Deploy to Cloud Run
-  - `roles/iam.serviceAccountUser` - Act as service account
-
-- **`GCP_PROJECT_ID`** - Your GCP project ID (e.g., `my-project-123`)
-
-- **`GCP_REGION`** - GCP region for deployment (e.g., `us-central1`, `asia-southeast1`)
-
-- **`GCP_ARTIFACT_REGISTRY_REPO`** - Artifact Registry repository name (e.g., `athena-docker`)
-
-- **`JWT_SECRET`** - JWT secret key for your application (generate with `openssl rand -base64 32`)
-
-### Setting Up GCP Service Account
-
-```bash
-# Create service account
-gcloud iam service-accounts create athena-ci \
-  --display-name="Athena CI/CD Service Account"
-
-# Grant permissions
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:athena-ci@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Create and download key
-gcloud iam service-accounts keys create key.json \
-  --iam-account=athena-ci@PROJECT_ID.iam.gserviceaccount.com
-
-# Copy the contents of key.json to GCP_SA_KEY secret
-cat key.json
+Error response format:
+```json
+{
+  "message": "Error description"
+}
 ```
-
-### Setting Up Artifact Registry
-
-```bash
-# Create Artifact Registry repository
-gcloud artifacts repositories create athena-docker \
-  --repository-format=docker \
-  --location=us-central1 \
-  --description="Athena Docker images"
-```
-
-### Workflow Triggers
-
-- **Pull Requests** to main/master/develop: Run tests only
-- **Push** to main/master: Run tests → build → deploy
-- **Push** to develop: Run tests only
-
-### Manual Deployment
-
-You can also manually trigger deployment from the GitHub Actions tab.
-
-### Monitoring Deployments
-
-```bash
-# View Cloud Run service details
-gcloud run services describe athena \
-  --platform=managed \
-  --region=REGION
-
-# View service logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=athena" \
-  --limit=50 \
-  --format=json
-
-# Get service URL
-gcloud run services describe athena \
-  --platform=managed \
-  --region=REGION \
-  --format='value(status.url)'
-```
-
-### Cloud Run Configuration
-
-The deployment configures:
-- **Port**: 1323 (matches Dockerfile EXPOSE)
-- **Auto-scaling**: 0-10 instances
-- **Resources**: 512Mi memory, 1 CPU
-- **Access**: Public (unauthenticated)
-- **Environment**: JWT_SECRET from GitHub secrets
-
-To customize these settings, edit the `gcloud run deploy` command in `.github/workflows/test.yml:deploy` job.
 
 ## Future Enhancements
 
-- [x] Database persistence (PostgreSQL)
-- [ ] Additional database support (MySQL, MongoDB)
-- [x] Bookmark title fetching from URL metadata
+- [x] Database persistence (Firestore)
+- [x] Bookmark metadata fetching from URL (title, image)
+- [x] AI-powered content summarization
+- [x] Pagination support
+- [x] User tier system
+- [x] Docker support
+- [x] CI/CD pipeline (GitHub Actions)
+- [ ] PostgreSQL support (repository implementation needed)
 - [ ] Full-text search across bookmarks
 - [ ] Tagging/categorization system
 - [ ] Bookmark collections/folders
@@ -1225,95 +946,23 @@ To customize these settings, edit the `gcloud run deploy` command in `.github/wo
 - [ ] Password reset functionality
 - [ ] Rate limiting per user/IP
 - [ ] API documentation (Swagger/OpenAPI)
-- [x] Docker support with docker-compose
-- [x] CI/CD pipeline (GitHub Actions)
 - [ ] Metrics and monitoring (Prometheus)
 - [ ] Graceful shutdown
-- [ ] Health check endpoint with dependencies
-- [ ] Soft delete for bookmarks
 - [ ] Bookmark sharing between users
 - [ ] Import/export bookmarks (HTML, JSON)
-- [ ] Bookmark duplicates detection
+- [ ] Bookmark duplicate detection
 - [ ] Browser extension integration
 
 ## Known Limitations
 
-- **In-memory storage**: Data is lost when server restarts
-- **Single instance**: Not suitable for horizontal scaling without external session store
-- **No refresh tokens**: Users must re-login after 24 hours
-- **No password complexity requirements**: Any non-empty password accepted
-- **No rate limiting**: Vulnerable to brute force attacks
-- **Default JWT secret**: Must be changed in production
-- **No email verification**: Anyone can register with any email
-- **No pagination**: Large bookmark collections may cause performance issues
-- **No bookmark deduplication**: Same URL can be bookmarked multiple times
-
-## Production Deployment Checklist
-
-Before deploying to production:
-
-- [ ] **Set strong `JWT_SECRET`** environment variable (min 32 characters)
-- [ ] Replace in-memory repositories with database implementations (PostgreSQL recommended)
-- [ ] Add password complexity requirements (min length, special chars, etc.)
-- [ ] Implement rate limiting (per IP and per user)
-- [ ] Add logging to external service (CloudWatch, ELK, Datadog)
-- [ ] Set up monitoring and alerts (server health, error rates)
-- [ ] Enable HTTPS/TLS (use Let's Encrypt or load balancer)
-- [ ] Review and harden CORS settings (whitelist specific origins)
-- [ ] Add input sanitization and validation
-- [ ] Implement refresh token mechanism
-- [ ] Add database migrations tooling
-- [ ] Set up automated database backups
-- [ ] Configure proper error handling (don't leak stack traces)
-- [ ] Add health check endpoint
-- [ ] Implement graceful shutdown
-- [ ] Add request timeout limits
-- [ ] Set up CDN for static assets (if any)
-- [ ] Configure firewall rules
-- [ ] Enable audit logging
-- [ ] Set up container orchestration (Kubernetes, ECS)
-
-## Development
-
-### Running in Development Mode
-
-```bash
-# With hot reload (using air or similar)
-go install github.com/cosmtrek/air@latest
-air
-
-# Or manually
-go run cmd/api-server/main.go
-```
-
-### Adding a New Endpoint
-
-1. Define request/response DTOs in `internal/transport/`
-2. Add handler method in `internal/handler/`
-3. Add tests in `internal/handler/*_test.go`
-4. Register route in `cmd/api-server/main.go`
-5. Update this README
-
-### Extending to Database
-
-1. Create new repository implementations (e.g., `user_postgres_repo.go`)
-2. Implement existing repository interfaces
-3. Update `cmd/api-server/main.go` to use new repositories
-4. Add database migrations
-5. Update configuration for database connection
-- [ ] Metrics and monitoring
-- [ ] Soft delete for bookmarks
-- [ ] Bookmark sharing between users
-- [ ] Import/export bookmarks
-
-## Known Limitations
-
-- **In-memory storage**: Data is lost when server restarts
-- **Single instance**: Not suitable for horizontal scaling
+- **In-memory storage**: Data is lost when server restarts (use Firestore for production persistence)
+- **No PostgreSQL support**: PostgreSQL repository implementation not yet available
 - **No refresh tokens**: Users must re-login after 24 hours
 - **No password complexity requirements**: Consider adding validation
 - **No rate limiting**: Vulnerable to brute force attacks
 - **Default JWT secret**: Must be changed in production
+- **No email verification**: Anyone can register with any email
+- **LLM cost**: Content summarization may incur API costs for paid users
 
 ## Production Deployment Checklist
 
@@ -1322,22 +971,30 @@ Before deploying to production:
 ### Security
 - [ ] Set a strong `JWT_SECRET` environment variable (min 32 characters)
 - [ ] Add password complexity requirements
-- [ ] Implement rate limiting
+- [ ] Implement rate limiting (per IP/user)
 - [ ] Review and harden CORS settings
 - [ ] Add input sanitization
 - [ ] Configure proper error handling (don't leak stack traces)
 - [ ] Enable HTTPS/TLS (handled by Cloud Run)
 - [ ] Implement refresh token mechanism
+- [ ] Add email verification
 
 ### Infrastructure
-- [x] Replace in-memory repositories with database implementations (PostgreSQL)
+- [x] Replace in-memory repositories with persistent storage (Firestore)
 - [x] Set up CI/CD pipeline (GitHub Actions)
 - [ ] Configure GCP service account with minimal permissions
 - [ ] Set up automated database backups
 - [ ] Configure database connection pooling
-- [ ] Set up monitoring and alerts (Cloud Monitoring, Prometheus)
-- [ ] Add logging to external service (Cloud Logging, ELK)
+- [ ] Set up monitoring and alerts (Cloud Monitoring)
+- [ ] Add logging to external service (Cloud Logging)
 - [ ] Configure firewall rules and VPC if needed
+- [ ] Set up rate limiting and CDN (Cloud Armor, Cloud CDN)
+
+### LLM Features
+- [ ] Monitor LLM API costs and set budget alerts
+- [ ] Implement caching for duplicate content summaries
+- [ ] Add retry logic with exponential backoff for LLM calls
+- [ ] Set up fallback if LLM provider is down
 
 ### GitHub Actions Setup
 - [ ] Add all required GitHub secrets (GCP_SA_KEY, GCP_PROJECT_ID, etc.)
